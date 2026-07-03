@@ -1,0 +1,20 @@
+\begin{table}[h!]
+\centering
+\begin{mytabular}{
+  colspec = {| L{12em} | C{3.5em} C{3.5em} C{3.5em} C{3.5em} C{3.5em} C{3.5em} |},
+  row{1} = {font=\bfseries},
+}
+
+\toprule
+参数                     &  12M  &   25M &   50M &  100M &  200M &     400M \\
+\midrule
+隐藏维度 ($d$)           & \o256 & \o384 & \o512 & \o768 &  1024 &   \o1536 \\
+循环单元数 ($8d$)        &  1024 &  3072 &  4096 &  6144 &  8192 &    12288 \\
+基础 CNN 通道数 ($d/16$) &\o\o16 &\o\o24 &\o\o32 &\o\o48 &\o\o64 & \o\o\o96 \\
+每个潜变量的代码数 ($d/16$) &\o\o16 &\o\o24 &\o\o32 &\o\o48 &\o\o64 & \o\o\o96 \\
+\bottomrule
+
+\end{mytabular}
+\caption{Dreamer 模型规模。MLP 隐藏单元数定义模型维度，循环单元数、卷积通道数和每个潜变量的代码数均由该维度派生。层数和潜变量数量在不同模型规模之间保持不变。}
+\label{tab:modelsizes}
+\end{table}

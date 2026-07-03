@@ -1,0 +1,8 @@
+\begin{figure}[t!]
+\centering
+\includegraphics[width=\linewidth]{figures/actgen/actgen}
+\caption{动作泛化。\textbf{(left)}
+\method 仅用 100 小时配对动作数据，就能从 2500 小时视频中学习准确的动作条件。按无动作训练和全动作训练之间的范围归一化后，其动作条件生成准确率超过 80\%。\textbf{(right)}
+当动作条件只从 Minecraft Overworld 数据中学习时，它仍能泛化到只出现在无标签视频中的 Nether 和 End 维度。这些环境在纹理、方块和物品上都不同于 Overworld。结果表明，\method 可以从少量动作数据中学习可跨环境泛化的动作条件，并将其用于多样化无标签网络视频中的模拟器学习。}
+\label{fig:actgen}
+\end{figure}

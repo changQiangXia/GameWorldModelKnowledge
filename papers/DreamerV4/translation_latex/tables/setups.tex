@@ -1,0 +1,27 @@
+\vfill
+\begin{table}[h!]
+\centering
+\begin{mytabular}{
+ colspec = {| L{6em} | C{5em} C{9em} | C{3.5em} C{3.5em} C{3.5em} |},
+ row{1} = {font=\bfseries},
+ stretch = 0.9,
+}
+
+\toprule
+\SetCell[r=2]{m}{智能体} &
+\SetCell[r=2]{m}{输入} &
+\SetCell[r=2]{m}{动作} &
+\SetCell[c=3]{c}{数据（小时）} \\
+& & &离线&网络视频&在线\\
+
+\midrule
+Dreamer 3 & 64$\times$64,\\物品栏&键盘、相机,\\ 抽象合成动作& --- & --- & 1.4K \\[1ex]
+VPT (RL)& 128$\times$128 &键盘、鼠标& 2.5K & 270K & 194K \\[1ex]
+VPT (BC)& 128$\times$128 &键盘、鼠标& 2.5K & 270K & --- \\[1ex]
+\method & 360$\times$640 &键盘、鼠标& 2.5K & --- & --- \\
+\bottomrule
+
+\end{mytabular}
+\caption{不同 Minecraft 智能体的实验设置比较。\method 完全从离线经验中学习，所需数据量比此前键盘鼠标智能体少 100$\times$。输入图像示例见\cref{fig:inputs}。}
+\label{tab:setups}
+\end{table}

@@ -1,0 +1,56 @@
+\begin{algorithm}[b]
+%\small
+\SetEndCharOfAlgoLine{}
+\SetKwComment{Comment}{// }{}
+\begin{minipage}[t]{.62\textwidth}%
+\BlankLine
+用 $S$ 个随机种子 episode 初始化数据集 $\mathcal{D}$。\;
+随机初始化神经网络参数 $\theta,\phi,\psi$。\;
+\While{not converged}{
+ \For{update step $c=1..C$}{
+ \BlankLine\Comment{动态学习}
+ 从 $\mathcal{D}$ 中抽取 $B$ 条数据序列 $\{(a_t,o_t,r_t)\}_{t=k}^{k+L}\sim\mathcal{D}$。\;
+ 计算模型状态 $s_t\sim\pr[p_\theta](s_t|s_{t-1},a_{t-1},o_t)$。\;
+ 使用表征学习更新 $\theta$。\;
+ \BlankLine\Comment{行为学习}
+ 从每个 $s_t$ 想象轨迹 $\{(s_\tau,a_\tau)\}_{\tau=t}^{t+H}$。\;
+ 预测奖励 $\E{}{\pr[q_\theta](r_\tau|s_\tau)}$ 和价值 $v_\psi(s_\tau)$。\;
+ 按 \cref{eq:lambda_value} 计算价值估计 $\mathrm{V}_{\mathrm{\lambda}}(s_\tau)$。\;
+ 更新$\phi\leftarrow\phi+\alpha\nabla_\phi\sum_{\tau=t}^{t+H}\mathrm{V}_{\mathrm{\lambda}}(s_\tau)$. \;
+ 更新$\shortpsi\leftarrow\shortpsi-\alpha\nabla_\psi\sum_{\tau=t}^{t+H}\frac{1}{2}\big\|v_\psi(s_\tau)\!\shortminus\!\mathrm{V}_{\mathrm{\lambda}}(s_\tau)\big\|^2$.
+ }
+ \BlankLine\Comment{环境交互}
+ $o_1\leftarrow\texttt{env.reset()}$ \;
+ \For{time step $t=1..T$}{
+ 根据历史计算 $s_t\sim\pr[p_\theta](s_t|s_{t-1},a_{t-1},o_t)$。\;
+ 用动作模型计算 $a_t\sim\pr[q_\phi](a_t|s_t)$。\;
+ 在动作中加入探索噪声。\;
+ $r_t,o_{t+1}\leftarrow\texttt{env.step(}a_t\texttt{)}.$ \;
+ }
+ 将经验加入数据集 $\mathcal{D}\leftarrow\mathcal{D}\cup\{(o_t,a_t,r_t)_{t=1}^T\}$。\;
+ \BlankLine
+}
+\end{minipage}%
+\begin{minipage}[t]{.38\textwidth}%
+\vspace{1ex}%
+\textbf{模型组件} \\
+\begin{tabular}[t]{@{} p{7em} @{} l @{}}%
+表征& $\pr[p_\theta](s_t|s_{t\text{-}1},a_{t\text{-}1},o_t)$ \\
+转移& $\pr[q_\theta](s_t|s_{t\text{-}1},a_{t\text{-}1})$ \\
+奖励& $\pr[q_\theta](r_t|s_t)$ \\
+动作& $\pr[q_\phi](a_t|s_t)$ \\
+价值& $\pr[v_\psi](s_t)$ \vspace{1ex} \\
+\end{tabular}
+\textbf{超参数} \\
+\begin{tabular}[t]{@{} p{14em} @{} c @{}}%
+种子回合& $S$ \\
+收集间隔& $C$ \\
+批量大小& $B$ \\
+序列长度& $L$ \\
+想象时域& $H$ \\
+学习率& $\alpha$ \\
+\end{tabular}
+\end{minipage}%
+\caption{Dreamer}
+\label{alg:agent}
+\end{algorithm}

@@ -1,0 +1,75 @@
+# Local Python environments and caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local translation dependencies
+.argos_packages/
+.argos_translate_deps/
+.deep_translator_deps/
+.translation_deps/
+
+# Translation caches and status files
+translation_cache*.json
+translation_status.json
+*_cache.json
+*_status.json
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+
+# Keep the main generated tutorial PDF, but ignore downloaded paper PDFs by default.
+papers/**/*.pdf
+papersofGW/**/*.pdf
+!world_model_tutorial.pdf
+
+# Large archives and unpacked paper source dumps
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+source_clean/
+source/
+
+# Common generated media or metric outputs
+metrics_log/
+videos/
+outputs/
+tmp/
+temp/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+~$*
+
+# Logs
+*.log.*
+*.tmp

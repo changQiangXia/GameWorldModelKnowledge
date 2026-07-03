@@ -1,0 +1,198 @@
+\input{figures/model/figure}
+
+\section*{学习算法}
+\label{sec:algorithm}
+
+我们介绍第三代 Dreamer 算法\citep{hafner2019dreamer,hafner2020dreamerv2}。
+算法由三个神经网络组成：世界模型预测候选动作的结果，critic 判断每个结果的价值，actor 选择能够达到高价值结果的动作。
+智能体与环境交互的同时，这三个组件会从回放经验中并行训练。
+要跨领域成功工作，三个组件都必须适应不同量级的信号，并在各自目标函数中稳健地平衡多个损失项。
+这很有挑战性：算法需要用固定超参数在多个差异很大的领域中学习，而不只是解决同一领域内的相似任务。
+本节介绍世界模型、critic 和 actor 及其稳健损失函数，并说明如何稳定预测未知量级的目标。
+
+\subsection*{世界模型学习}
+
+世界模型通过自编码学习感知输入的紧凑表示\citep{kingma2013vae}，并通过预测候选动作下的未来表示和奖励来支持规划。
+我们将世界模型实现为循环状态空间模型（RSSM）\citep{hafner2018planet}，如 \cref{fig:model} 所示。
+首先，编码器把感知输入 $x_t$ 映射为随机表示 $z_t$。
+随后，带有循环状态 $h_t$ 的序列模型根据过去动作 $a_{t-1}$ 预测这些表示的序列。
+$h_t$ 与 $z_t$ 拼接后形成模型状态；模型从该状态预测奖励 $r_t$、episode 是否继续的标志 $c_t\in\{0,1\}$，并重建输入，以保证表示包含足够信息：
+
+\eq{
+\begin{alignedat}{4}
+\raisebox{1.95ex}{\llap{\blap{\ensuremath{
+\text{RSSM} \hspace{1ex} \begin{cases} \hphantom{A} \\ \hphantom{A} \\ \hphantom{A} \end{cases} \hspace*{-2.4ex}
+}}}}
+& \text{Sequence model:} \padspace && h_t &\ = &\ f_\phi(h_{t-1},z_{t-1},a_{t-1}) \\
+& \text{Encoder:} \padspace && z_t &\ \sim &\ \qp(z_t | h_t,x_t) \\
+& \text{Dynamics predictor:} \padspace && \hat{z}_t &\ \sim &\ \pp(\hat{z}_t | h_t) \\
+& \text{Reward predictor:} \padspace && \hat{r}_t &\ \sim &\ \pp(\hat{r}_t | h_t,z_t) \\
+& \text{Continue predictor:} \padspace && \hat{c}_t &\ \sim &\ \pp(\hat{c}_t | h_t,z_t) \\
+& \text{Decoder:} \padspace && \hat{x}_t &\ \sim &\ \pp(\hat{x}_t | h_t,z_t)
+\end{alignedat}}
+
+\Cref{fig:openl} 展示了世界模型的长期视频预测。
+对于图像输入，编码器和解码器使用卷积神经网络（CNN）；对于向量输入，则使用多层感知机（MLP）。
+动力学、奖励和 continue 预测器也采用 MLP。
+表示从一组 softmax 分布中采样，并在采样步骤上使用直通梯度\citep{bengio2013straight,hafner2020dreamerv2}。
+给定输入 $x_{1:T}$、动作 $a_{1:T}$、奖励 $r_{1:T}$ 和继续标志 $c_{1:T}$ 的序列批次，世界模型参数 $\phi$ 端到端优化，以最小化预测损失 $\mathcal{L}_{\mathrm{pred}}$、动力学损失 $\mathcal{L}_{\mathrm{dyn}}$ 和表示损失 $\mathcal{L}_{\mathrm{rep}}$；对应权重为 $\beta_{\mathrm{pred}}=1$、$\beta_{\mathrm{dyn}}=1$ 和 $\beta_{\mathrm{rep}}=0.1$：
+
+\eq{
+\mathcal{L}(\phi)\doteq
+\E_{q_\phi}<\Big>[\textstyle\sum_{t=1}^T(
+ \beta_{\mathrm{pred}}\mathcal{L}_{\mathrm{pred}}(\phi)
+ +\beta_{\mathrm{dyn}}\mathcal{L}_{\mathrm{dyn}}(\phi)
+ +\beta_{\mathrm{rep}}\mathcal{L}_{\mathrm{rep}}(\phi)
+)].
+\label{eq:wm}
+}
+
+\input{figures/openl/figure}
+预测损失使用后文介绍的 symlog 平方损失训练解码器和奖励预测器，并用逻辑回归训练 continue 预测器。
+动力学损失通过最小化预测器 $\pp(z_t|h_t)$ 与下一个随机表示 $\qp(z_t|h_t,x_t)$ 之间的 KL 散度，训练序列模型预测下一个表示。
+表示损失则反过来促使表示变得更可预测，从而允许我们在想象训练中使用因子化动力学预测器进行快速采样。
+这两个损失的区别在于停止梯度算子 $\operatorname{sg}(\cdot)$ 的位置以及损失尺度。
+为避免出现退化解，也就是动力学很容易预测但表示不包含足够输入信息，我们采用 free bits\citep{kingma2016freebits}，将动力学损失和表示损失在 1 nat（约 1.44 bits）以下截断。
+当这两个损失已经足够小时，它们就被关闭，使学习重点转向预测损失：
+
+\eq{
+\mathcal{L_{\mathrm{pred}}}(\phi) & \doteq
+-\lnpp(x_t|z_t,h_t)
+-\lnpp(r_t|z_t,h_t)
+-\lnpp(c_t|z_t,h_t) \\
+\mathcal{L_{\mathrm{dyn}}}(\phi) & \doteq
+\max\bigl(1,\KL[\sg(\qp(z_t|h_t,x_t)) || \hspace{3.2ex}\pp(z_t|h_t)\hphantom{)}]\bigr) \\
+\mathcal{L_{\mathrm{rep}}}(\phi) & \doteq
+\max\bigl(1,\KL[\hspace{3.2ex}\qp(z_t|h_t,x_t)\hphantom{)} || \sg(\pp(z_t|h_t))]\bigr)
+}
+
+以往世界模型需要根据环境视觉复杂度，对表示损失采用不同缩放\citep{hafner2019dreamer}。
+复杂 3D 环境包含许多与控制无关的细节，因此需要更强的正则化来简化表示并提高可预测性。
+而在具有静态背景、单个像素也可能影响任务的游戏中，则需要较弱正则化来保留细节。
+我们发现，把 free bits 与较小的表示损失结合起来，可以解决这一矛盾，并允许跨领域使用固定超参数。
+此外，我们使用后文介绍的 symlog 函数变换向量观测，避免输入值和重建梯度过大，从而进一步稳定表示损失的权衡。
+
+早期实验中，我们偶尔观察到 KL 损失尖峰，这与深度变分自编码器中的报告一致\citep{child2020vdvae}。
+为避免这种情况，我们把编码器和动力学预测器的 categorical 分布参数化为 1\% 均匀分布与 99\% 神经网络输出的混合，使它们不可能变成确定性分布，从而保证 KL 损失行为稳定。
+补充材料中包括更多的模型细节和超参数。
+
+\subsection*{Critic 学习}
+
+Actor 和 critic 神经网络完全从世界模型预测出的抽象表示轨迹中学习行为\citep{sutton1991dyna}。
+与环境交互时，我们直接从 actor 网络采样动作，而不做前瞻规划。
+Actor 和 critic 都在模型状态 $s_t \doteq \{h_t,z_t\}$ 上运行，因此可以利用循环世界模型学到的马尔科夫表示。
+对于每个模型状态，actor 的目标是最大化回报 $R_t \doteq \textstyle\sum_{\tau=0}^\infty \gamma^\tau r_{t+\tau}$，折扣因子为 $\gamma=0.997$。
+为考虑超出预测时域 $T=16$ 的奖励，critic 学习在当前 actor 行为下每个状态的回报分布近似\citep{bellemare2017c51}：
+
+\eq{
+&\text{Actor:}\quad
+&& a_t \sim \p<\pi_\theta>(a_t|s_t) \qquad
+&\text{Critic:}\quad
+&& \p<v_\psi>(R_t | s_t)
+\label{eq:ac}
+}
+
+从回放输入的表示开始，世界模型和 actor 生成一条想象轨迹，包括模型状态 $s_{1:T}$、动作 $a_{1:T}$、奖励 $r_{1:T}$ 和继续标志 $c_{1:T}$。
+由于 critic 预测的是一个分布，我们将其预测值 $v_t \doteq \operatorname{E}[\p<v_\psi>(\,\cdot|s_t)]$ 读作该分布的期望。
+为估计包含预测时域之外奖励的回报，我们计算自举 $\lambda$-return\citep{sutton2018rlbook}，将预测奖励和价值结合起来。
+critic 使用最大似然损失学习预测回报估计 $R^\lambda_t$ 的分布：
+
+\eq{
+\mathcal{L}(\psi) \doteq -\textstyle\sum_{t=1}^T \p<\ln p_\psi>(R^\lambda_t | s_t)
+\qquad
+R^\lambda_t \doteq r_t + \gamma c_t \Big(
+ (1 - \lambda) v_t +
+ \lambda R^\lambda_{t+1}
+\Big)
+\qquad
+R^\lambda_T \doteq v_T
+\label{eq:lambda}
+}
+
+一种简单做法是把 critic 参数化为正态分布，但回报分布可能是多模态的，而且不同环境下量级差异很大。为在这些条件下稳定并加速学习，我们将 critic 参数化为带指数间隔 bins 的 categorical 分布，使梯度尺度与预测目标量级解耦；具体做法见后文。
+为提升奖励难以预测环境中的价值预测，我们将 critic 损失同时用于想象轨迹和回放轨迹；想象轨迹的损失权重为 $\beta_{\mathrm{val}}=1$，从回放缓冲区采样的轨迹损失权重为 $\beta_{\mathrm{repval}}=0.3$。critic 的回放损失使用想象 rollout 起始状态处的想象回报 $R^\lambda_t$ 作为 on-policy 价值标注，再结合回放奖励计算 $\lambda$-return。
+
+由于 critic 回归的目标依赖自身预测，我们通过正则化 critic，使其接近自身参数指数移动平均所产生的输出，从而稳定学习。
+这类似于强化学习中常用的目标网络\citep{mnih2015dqn}，但仍允许我们使用当前 critic 网络计算回报。
+我们还注意到，训练开始时随机初始化的奖励预测器和 critic 可能产生很大的预测奖励，从而延迟学习启动。
+因此，我们将奖励预测器和 critic 的输出权重矩阵初始化为零，以缓解这一问题并加速早期学习。
+
+\subsection*{Actor 学习}
+
+Actor 学习选择能够最大化回报的动作，同时通过熵正则项保持探索\citep{williams1991maxentreinforce}。
+然而，该正则项的合适尺度同时取决于环境中奖励的大小和频率。
+理想情况下，当奖励稀疏时，我们希望智能体探索更多；当奖励密集或容易获得时，则更偏向利用。与此同时，探索强度不应受到环境中任意奖励缩放的影响。
+因此，我们需要归一化回报尺度，同时保留奖励频率信息。
+
+为在不同领域使用固定熵尺度 $\eta=3\times10^{-4}$，我们将回报大致归一化到区间 $[0, 1]$。实践中，从回报中减去偏移量不会改变 actor 梯度，因此只需除以范围 $S$。此外，为避免在稀疏奖励下放大函数近似带来的噪声，我们只缩小较大的回报幅度，而保持低于阈值 $L=1$ 的小回报不变。我们对离散和连续动作都使用 Reinforce 估计器\citep{williams1992reinforce}，得到如下替代损失函数：
+
+\eq{
+\mathcal{L}(\theta)\doteq
+-\textstyle\sum_{t=1}^T%\Big(
+\sg\!\Big(\big(R^\lambda_t-v_\psi(s_t)\big)/\max(1,\,S)\Big)
+\log\p<\pi_\theta>(a_t|s_t)
++\,\eta\H[\p<\pi_\theta>(a_t|s_t)]%\Big)
+}
+
+回报分布可能是多模态的，并且包含离群值，特别是在随机化环境中，有些 episode 能达到的回报显著高于其他 episode。如果用观测到的最小和最大回报做归一化，回报尺度可能被压得过小，从而导致次优收敛。为对离群值保持稳健，我们使用回报批次中第 5\textsuperscript{th} 到第 95\textsuperscript{th} 百分位之间的范围，并用指数移动平均平滑该估计：
+
+\eq{
+S \doteq \EMA\!\big(\Per(R^\lambda_t, 95) - \Per(R^\lambda_t, 5), 0.99\big)
+}
+
+以往工作通常归一化优势函数\citep{schulman2017ppo} 而不是回报，这会固定地强调回报最大化，而不管奖励是否容易达到。
+当奖励稀疏时，放大优势会同时放大噪声，噪声可能压过熵正则项并使探索停滞。
+用标准差归一化奖励或回报也可能在稀疏奖励下失败，因为此时标准差接近零，会无视奖励大小而将其剧烈放大。
+约束优化方法会在状态平均意义上瞄准固定熵\citep{haarnoja2018sac,abdolmaleki2018mpo}，不考虑可达回报；这种做法较稳健，但在稀疏奖励下探索较慢，在密集奖励下收敛值较低。
+这些方法都没有在跨领域设置中给出稳定的超参数。
+带分母下限的回报归一化克服了这些问题：它在稀疏奖励下探索更快，并能在多样领域中收敛到高性能。
+
+\subsection*{稳健预测}
+\label{sec:symlog}
+
+重建输入以及预测奖励和回报具有挑战性，因为这些量的尺度会随领域而变化。
+用平方损失预测大目标可能导致发散，而绝对损失和 Huber 损失\citep{mnih2015dqn} 又可能使学习停滞。
+另一方面，基于运行统计量归一化目标\citep{schulman2017ppo} 会给优化引入非平稳性。
+我们提出 symlog 平方误差作为一个简单解决方案。
+具体来说，带输入 $x$ 和参数 $\theta$ 的神经网络 $f(x,\theta)$ 学习预测目标 $y$ 的变换版本。
+为读出网络预测 $\hat{y}$，我们应用逆变换：
+
+\eq{
+\mathcal{L(\theta)} \doteq \textstyle\frac{1}{2}\big(f(x,\theta)-\symlog(y)\big)^2 \qquad
+\hat{y} \doteq \symexp\!\big(f(x,\theta)\big)
+\label{eq:logpred}}
+
+直接使用对数变换无法处理可能为负的目标。
+因此，我们从双对称对数函数族中选择一个函数\citep{webber2012symlog}，称为 symlog；其逆函数称为 symexp：
+
+\eq{
+\symlog(x) \doteq \sign(x)\ln\!\big(|x|+1\big) \qquad
+\symexp(x) \doteq \sign(x)\big(\!\exp(|x|)-1\big)
+\label{eq:symlog}}
+
+symlog 函数会压缩大正值和大负值的幅度。
+与普通对数不同，它在保留输入符号的同时围绕原点对称。
+这使优化过程在需要时可以快速把网络预测移动到较大数值。
+同时，symlog 在原点附近近似恒等函数，因此不会影响已经足够小的目标的学习。
+
+对于奖励或回报这类可能随机的目标，我们引入 symexp two-hot 损失。网络输出的是指数间隔 bins $b_i \in B$ 上 softmax 分布的 logits。
+预测值读作 bin 位置按预测概率加权后的平均值。重要的是，由于加权平均可以落在两个 bin 之间，网络仍然可以输出区间内任意连续值：
+
+\eq{
+\hat{y} \doteq \operatorname{softmax}(f(x))^T B \qquad
+B \doteq \symexp(\begin{bmatrix} -20 & ... & +20 \end{bmatrix})
+}
+
+网络使用 two-hot 编码目标训练\citep{schrittwieser2019muzero,bellemare2017c51}，这是 one-hot 编码在连续值上的推广。一个标量的 two-hot 编码是长度为 $|B|$ 的向量，除最接近该标量的两个 bin 索引 $k$ 和 $k+1$ 外，其余项均为 $0$；这两个非零项之和为 $1$，离编码连续值更近的 bin 获得更高线性权重。
+随后，网络通过带软目标的 categorical cross-entropy 损失进行训练。注意，损失只依赖分配给 bin 的概率，而不依赖 bin 位置对应的连续值，因此梯度大小与目标大小解耦：
+
+\eq{
+\mathcal{L}(\theta) \doteq
+-\twohot(y)^T \operatorname{log\,softmax}(f(x,\theta))
+\label{eq:twohotloss}
+}
+
+基于这些原则，Dreamer 对向量观测使用 symlog 变换，既用于编码器输入，也用于解码器目标；同时，对奖励预测器和 critic 使用 symexp two-hot 损失。
+我们发现，这些技术能够在多样领域中带来稳健且快速的学习。
+对于 critic 学习，已有工作提出过非对称变换方案\citep{kapturowski2018r2d2}，但我们发现它在跨领域平均效果上较弱。
+与替代方案相比，symlog 变换避免了截断大目标\citep{mnih2015dqn}、由归一化引入非平稳性\citep{schulman2017ppo}，以及在检测到新极值时调整网络权重\citep{hessel2019popart}。

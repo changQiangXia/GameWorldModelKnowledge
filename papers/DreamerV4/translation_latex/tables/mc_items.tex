@@ -1,0 +1,29 @@
+\centering
+\newcommand{\icon}[1]{\includegraphics[height=2.5ex]{icons/#1.png}}
+\newcommand{\name}[1]{\raisebox{.4ex}{#1}}
+\vspace*{1ex}
+\begin{mytabular}{
+ colspec = {| C{3em} | L{13em} |},
+ row{1} = {font=\bfseries},
+}
+
+\toprule
+图标&物品\\
+\midrule
+\icon{log} & \name{原木} \\
+\icon{planks} & \name{木板} \\
+\icon{stick} & \name{木棍} \\
+\icon{crafting_table} & \name{工作台} \\
+\icon{wooden_pickaxe} & \name{木镐} \\
+\icon{cobblestone} & \name{圆石} \\
+\icon{stone_pickaxe} & \name{石镐} \\
+\icon{iron_ore} & \name{铁矿石} \\
+\icon{furnace} & \name{熔炉} \\
+\icon{iron_ingot} & \name{铁锭} \\
+\icon{iron_pickaxe} & \name{铁镐} \\
+\icon{diamond} & \name{钻石} \\
+\bottomrule
+
+\end{mytabular}
+\captionof{table}{评估过程中用于衡量进度的里程碑物品。}
+\label{tab:mc_items}

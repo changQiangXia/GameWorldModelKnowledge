@@ -1,0 +1,27 @@
+\suppressfloats
+
+\section{导言}
+\label{sec:intro}
+
+\begingroup
+\setlength\intextsep{0pt}
+\input{figures/overview/figure}
+
+智能体即使从未两次遇到完全相同的情境，也能够在复杂环境中达成目标。这种能力依赖于从既有经验中形成关于世界的表示，并将其泛化到新的情境。世界模型为这种能力提供了一种明确形式：它用能够预测未来的参数化模型来表示智能体对世界的认识。
+
+当感知输入是高维图像时，潜在动力学模型可以把观测抽象到紧凑的状态空间中，并在该空间内向前预测\citep{watter2015e2c,oh2017vpn,gregor2019beliefstate}。与直接在图像空间预测相比，潜在状态占用的内存更小，因此可以并行想象数千条轨迹。随着深度学习和潜变量模型的发展，学习有效的潜在动力学模型正变得越来越可行\citep{krishnan2015deepkalman,karl2016dvbf,doerr2018prssm,buesing2018dssm}。
+
+从动力学模型导出行为有多种方式。常见做法是用参数化策略最大化想象回报\citep{sutton1991dyna,ha2018worldmodels,zhang2018solar}，或采用在线规划\citep{chua2018pets,hafner2018planet}。但如果只考虑固定想象时域内的奖励，智能体容易得到短视行为\citep{tingwu2019benchmark}。此外，已有工作通常使用无导数优化来提高对模型误差的稳健性\citep{ebert2017visualmpc,chua2018pets,parmas2019pipps}，而没有充分利用神经网络动力学提供的解析梯度\citep{henaff2019planbybackprop,srinivas2018upn}。
+
+本文提出 Dreamer，这是一种完全通过潜在想象从图像中学习长时程行为的智能体。我们设计了新的 actor-critic 算法，在高效利用神经网络动力学的同时，也能考虑超出想象时域的回报。具体而言，我们在学得的潜在空间中预测状态价值和动作，如 \cref{fig:overview} 所示。价值函数通过想象奖励优化 Bellman 一致性；策略则通过将价值的解析梯度沿动力学反向传播来最大化价值。
+
+与在线学习或依赖经验回放的 actor-critic 算法相比\citep{lillicrap2015ddpg,mnih2016a3c,schulman2017ppo,haarnoja2018sac,lee2019slac}，世界模型可以在过去经验之间进行插值，并提供多步回报的解析梯度，从而更高效地优化策略。
+
+\pagebreak
+
+本文的主要贡献如下:
+\endgroup
+\begin{itemize}
+\itempar{以潜在想象学习长时程行为} 如果只使用有限的想象时域，基于模型的智能体可能会变得短视。我们通过同时预测动作和状态价值来缓解这一限制。完全在潜在空间中通过想象训练，使我们能够沿潜在动力学传播解析价值梯度，从而高效学习策略。
+\itempar{视觉控制的经验性能} 我们将 Dreamer 与现有表示学习方法结合，并在图像输入的 DeepMind Control Suite 上评估，如 \cref{fig:tasks} 所示。在所有任务使用相同超参数的情况下，Dreamer 在数据效率、计算时间和最终性能方面超过了此前的基于模型和无模型智能体。
+\end{itemize}

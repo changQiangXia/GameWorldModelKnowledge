@@ -1,0 +1,68 @@
+\section{学习行为 通过潜在想象}
+\label{sec:behavior}
+\vspace{-1ex}
+
+\input{figures/schema/figure}
+\input{algos/agent}
+\input{figures/horizon/figure}
+
+Dreamer 在学得的世界模型的紧凑潜在空间中学习长时程行为，并高效利用神经网络形式的潜在动力学。为此，我们通过重参数化，将多步回报的随机梯度沿动作、状态、奖励和价值的神经网络预测反向传播。本节介绍本文的主要贡献。
+
+\paragraph{想象环境}
+
+潜在动力学定义了一个完全可观测的马尔科夫决策过程\citep[MDP;][]{sutton1991dyna}，因为紧凑模型状态 $s_t$ 具有马尔科夫性。我们用 $\tau$ 表示想象轨迹中的时间索引。想象轨迹从真实模型状态 $s_t$ 出发，这些状态来自智能体过去经验中的观测序列；随后轨迹按照转移模型 $s_\tau\sim\q(s_\tau|s_{\tau-1},a_{\tau-1})$、奖励模型 $r_\tau\sim\q(r_\tau|s_\tau)$ 和策略 $a_\tau\sim\q(a_\tau|s_\tau)$ 的预测向前展开。目标是在策略参数上最大化期望想象回报 $\smash{\E{q}{\sum_{\tau=t}^\infty \gamma^{\tau-t} r_\tau}}$。
+
+\paragraph{动作和值函数模型}
+
+考虑有限时域 $H$ 的想象轨迹。Dreamer 使用 actor-critic 方法学习行为，使其能够考虑超出想象时域的奖励。为此，我们在世界模型的潜在空间中学习一个动作模型和一个价值模型。动作模型实现策略，目标是预测能够解决想象环境的动作。价值模型估计动作模型从每个状态 $s_\tau$ 出发所能获得的期望想象回报：
+\begin{equation}
+\begin{aligned}
+\makebox[12em][l]{动作模型：} && &a_\tau \sim\ \pr[q_\phi](a_\tau|s_\tau) \\
+\makebox[12em][l]{价值模型：} && &v_\psi(s_\tau) \approx \E{q(\cdot|s_\tau)}{\textstyle\sum_{\tau=t}^{t+H}\gamma^{\tau-t}r_\tau}.
+\label{eq:action_value_model}
+\end{aligned}
+\end{equation}%
+动作模型和价值模型像典型策略迭代那样协同训练：动作模型试图最大化价值估计，而价值模型则拟合会随动作模型变化而变化的价值估计。
+
+动作模型和价值模型均采用全连接神经网络，参数分别为 $\phi$ 和 $\psi$。动作模型输出一个由 tanh 变换的高斯分布\citep{haarnoja2018sac}，其充分统计量由神经网络预测。这允许使用重参数化采样\citep{kingma2013vae,rezende2014vae}，即把采样动作视为神经网络输出的确定性函数，从而可以让解析梯度穿过采样操作：
+\begin{equation}
+a_\tau=\operatorname{tanh}\!\big(\mu_\phi(s_\tau)+\sigma_\phi(s_\tau)\,\epsilon\big),
+\quad\epsilon\sim\Normal(0,\I).
+\end{equation}%
+
+\paragraph{值估计}
+
+为了学习动作模型和价值模型，我们需要估计想象轨迹 $\{s_\tau,a_\tau,r_\tau\}_{\tau=t}^{t+H}$ 的状态价值。这些轨迹从模型状态 $s_t$ 分支出来；$s_t$ 来自智能体经验数据集中采样的序列批次，并使用动作模型采样出的动作向前预测 $H$ 个想象步。状态价值可以用多种方式估计，从而在偏差和方差之间折中\citep{sutton2018rl}：
+\begin{alignat}{3}
+&\mathrm{V}_{\mathrm{R}}(s_\tau)&&\defined\E[\bigg]{q_\theta,q_\phi}{
+ \sum_{n=\tau}^{t+H} r_n}, \\
+&\mathrm{V}_{\mathrm{N}}^k(s_\tau)&&\defined\E[\bigg]{q_\theta,q_\phi}{
+ \sum_{n=\tau}^{h-1} \gamma^{n-\tau}r_n
+ +\gamma^{h-\tau} v_\psi(s_h)} \quad\text{with}\quad h=\min(\tau+k,t+H), \\
+&\mathrm{V}_{\mathrm{\lambda}}(s_\tau)&&\defined
+ (1-\lambda) \sum_{n=1}^{H-1} \lambda^{n-1} \mathrm{V}_{\mathrm{N}}^n(s_\tau) + \lambda^{H-1}\mathrm{V}_{\mathrm{N}}^H(s_\tau),
+\label{eq:lambda_value}
+\end{alignat}%
+其中期望在想象轨迹下估计。$\mathrm{V}_{\mathrm{R}}$ 只累加从 $\tau$ 到想象时域末端的奖励，并忽略其后的奖励；这允许在没有价值模型的情况下学习动作模型，我们在实验中将其作为消融对比。$\mathrm{V}_{\mathrm{N}}^k$ 使用学得的价值模型估计 $k$ 步之后的奖励。Dreamer 使用 $\mathrm{V}_{\mathrm{\lambda}}$，即不同 $k$ 的估计值的指数加权平均，以平衡偏差和方差。\Cref{fig:horizon} 表明，在想象中学习价值模型可以让 Dreamer 解决长时程任务，同时对想象时域长度保持稳健。所有任务的实验细节和结果见 \cref{sec:experiments}。
+
+\pagebreak
+
+\paragraph{学习目标}
+
+为了更新动作模型和价值模型，我们首先为想象轨迹上的所有状态 $s_\tau$ 计算价值估计 $\mathrm{V}_{\mathrm{\lambda}}(s_\tau)$。动作模型 $\pr[q_\phi](a_\tau|s_\tau)$ 的目标是预测能够产生高价值状态轨迹的动作。价值模型 $v_\psi(s_\tau)$ 则反过来回归这些价值估计：
+
+\noindent\begin{minipage}{.4\textwidth}\vspace*{-2ex}\hfil\begin{equation}
+\max_\phi\E[\bigg]{q_\theta,q_\phi}{\sum_{\tau=t}^{t+H} \mathrm{V}_{\mathrm{\lambda}}(s_\tau)}, \label{eq:action_objective} \\
+\end{equation}\end{minipage}%
+\noindent\begin{minipage}{.6\textwidth}\begin{equation}
+\min_\psi\E[\bigg]{q_\theta,q_\phi}{\sum_{\tau=t}^{t+H} \frac{1}{2}\Big\|v_\psi(s_\tau)-\mathrm{V}_{\mathrm{\lambda}}(s_\tau))\Big\|^2}. \label{eq:value_objective}
+\end{equation}\end{minipage}
+
+价值模型被更新以回归这些目标，并像通常做法一样在目标处停止梯度\citep{sutton2018rl}。动作模型则利用穿过学得动力学的解析梯度来最大化价值估计。直观地说，价值估计依赖奖励和价值预测；这些预测依赖想象状态；而想象状态又依赖想象动作。由于所有步骤都由神经网络实现，我们可以通过随机反向传播\citep{kingma2013vae,rezende2014vae}解析计算 $\smash{\nabla_\phi\E{q_\theta,q_\phi}{\sum_{\tau=t}^{t+H}\mathrm{V}_{\mathrm{\lambda}}(s_\tau)}}$。
+连续动作和潜在状态使用重参数化，离散动作使用直通梯度\citep{bengio2013straight}。学习行为时，世界模型参数保持固定。
+
+在可能提前终止的任务中，世界模型还会从每个潜在状态预测折扣因子。于是，\cref{eq:action_objective,eq:value_objective} 中各时间步会乘以预测折扣因子的累积乘积；换言之，如果想象轨迹更可能已经结束，对应项的权重就会降低。
+
+\paragraph{与演员批评方法的比较}
+
+使用 Reinforce 梯度的智能体\citep{williams1992reinforce}，例如 A3C 和 PPO \citep{mnih2016a3c,schulman2017ppo}，会使用价值基线来降低梯度方差；而 Dreamer 会穿过价值模型反向传播。这一点类似于确定性或重参数化 actor-critic 方法\citep{silver2014dpg}，例如 DDPG 和 SAC \citep{lillicrap2015ddpg,haarnoja2018sac}。不过，这些方法没有利用穿过转移模型的梯度，只最大化即时 Q 值。MVE 和 STEVE \citep{feinberg2018mve,buckman2018steve} 将它们扩展为使用学得动力学的多步 Q 学习，以提供更准确的 Q 值目标。我们预测状态价值；由于策略梯度会穿过动力学反向传播，这已经足以优化策略。与相关工作的更详细比较见 \cref{sec:related}。

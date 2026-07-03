@@ -1,0 +1,67 @@
+\vspace*{-.8ex}
+\section{学习潜在动力学}
+\label{sec:dynamics}
+\vspace*{-.8ex}
+
+\input{figures/video/figure}
+\input{figures/bars/figure}
+\input{figures/value-small/figure}
+
+在想象中学习行为，需要世界模型具有足够好的泛化能力。本文关注潜在动力学模型：它们在紧凑的潜在空间中向前预测，便于进行长时程预测，也让智能体能够并行想象成千上万条轨迹。已有工作提出了多种面向控制的表征学习目标\citep{watter2015e2c,jaderberg2016unreal,oord2018cpc,eslami2018gqn}。下面讨论 Dreamer 可使用的三类表征学习方法：奖励预测、图像重建和对比估计。
+
+\paragraph{奖励预测}
+
+潜在想象需要表征模型 $\p(s_t|s_{t-1},a_{t-1},o_t)$、转移模型 $\q(s_t|s_{t-1},a_{t-1},)$ 和奖励模型 $\q(r_t|s_t)$，如 \cref{sec:overview} 所述。原则上，只要学习根据动作和过去观测预测未来奖励，就可能得到这样的表征\citep{oh2017vpn,gelada2019deepmdp,schrittwieser2019muzero}。当数据集足够大且足够多样时，这类表征应当可以支持控制任务。但在有限数据集上，尤其是奖励稀疏时，让模型学习与奖励相关的观测信息，通常能改进世界模型\citep{jaderberg2016unreal,gregor2019beliefstate}。
+
+\pagebreak
+
+\paragraph{重建}
+
+我们先描述 PlaNet~\citep{hafner2018planet} 使用的世界模型。该模型通过重建图像来学习潜在动力学，如 \cref{fig:dynamics} 所示。世界模型由以下组件构成，其中观测模型只用于提供学习信号：
+\begin{gather}
+\begin{aligned}
+\makebox[12em][l]{表征模型：} && &\pr[p_\theta](s_t|s_{t-1},a_{t-1},o_t) \\
+\makebox[12em][l]{观测模型：} && &\pr[q_\theta](o_t|s_t) \\
+\makebox[12em][l]{奖励模型：} && &\pr[q_\theta](r_t|s_t) \\
+\makebox[12em][l]{转移模型：} && &\pr[q_\theta](s_t|s_{t-1},a_{t-1}).
+\label{eq:generative_model}
+\end{aligned}
+\end{gather}%
+这些组件被联合优化，以提高变分下界\citep[ELBO;][]{jordan1999viintro}，更一般地说，是优化变分信息瓶颈\citep[VIB;][]{tishby2000ib,alemi2016vib}。如 \cref{sec:derivations} 推导所示，该目标包含观测和奖励的重建项，以及一个 KL 正则项。
+\begin{equation}
+\begin{aligned}
+&\mathcal{J}_{\mathrm{REC}}
+ \defined\E[\bigg]{p}{\sum_t\Big(\mathcal{J}_{\mathrm{O}}^t+\mathcal{J}_{\mathrm{R}}^t+\mathcal{J}_{\mathrm{D}}^t\Big)}+\text{const} \qquad
+\mathcal{J}_{\mathrm{O}}^t
+ \defined\ \ln\q(o_t|s_t) \\
+&\mathcal{J}_{\mathrm{R}}^t
+ \defined\ln\q(r_t|s_t) \qquad
+\mathcal{J}_{\mathrm{D}}^t
+ \defined\ -\beta\KL{\p(s_t|s_{t-1},a_{t-1},o_t)}{\q(s_t|s_{t-1},a_{t-1})}.
+\label{eq:generative_objective}
+\end{aligned}
+\end{equation}%
+
+我们将转移模型实现为循环状态空间模型\citep[RSSM;][]{hafner2018planet}；表征模型把 RSSM 与作用于图像观测的卷积神经网络\citep[CNN;][]{lecun1989cnn} 结合起来；观测模型使用转置 CNN；奖励模型则使用全连接网络。合并后的参数向量 $\theta$ 通过随机反向传播更新\citep{kingma2013vae,rezende2014vae}。\Cref{fig:video} 展示了该模型的视频预测效果。模型细节见 \cref{sec:hparams} 和 \citet{hafner2018planet}。
+
+\paragraph{对比估计}
+
+预测像素可能需要很高的模型容量。另一种做法是从图像预测状态，从而鼓励模型状态与观测之间保持互信息\citep{guo2018actioncpc}。这会用状态模型替代观测模型：
+\begin{gather}
+\begin{aligned}
+\makebox[12em][l]{状态模型：} && &\pr[q_\theta](s_t|o_t).
+\label{eq:contrastive_model}
+\end{aligned}
+\end{gather}%
+重建目标利用了观测边缘概率为常数这一事实；改用状态模型后，需要处理状态边缘概率。如 \cref{sec:derivations} 所示，可以通过噪声对比估计\citep[NCE;][]{gutmann2010nce,oord2018cpc} 来估计它，做法是在当前序列批次中的观测 $o'$ 上平均状态模型。直观地说，$\q(s_t|o_t)$ 让状态可以由当前图像预测，而 $\ln\sum_{o'}\q(s_t|o')$ 保持状态的多样性，避免表示塌缩：
+\begin{gather}
+\begin{aligned}
+\mathcal{J}_{\mathrm{NCE}}
+\defined\ \E[\bigg]{}{\sum_t\Big(\mathcal{J}_{\mathrm{S}}^t+\mathcal{J}_{\mathrm{R}}^t+\mathcal{J}_{\mathrm{D}}^t\Big)}\quad
+\mathcal{J}_{\mathrm{S}}^t
+\defined\ &\ln\q(s_t|o_t)
+-\ln\bigg(\sum_{o'}\q(s_t|o')\bigg).
+\label{eq:contrastive_objective}
+\end{aligned}\raisetag{1.52\baselineskip}
+\end{gather}%
+我们将状态模型实现为 CNN，并同样使用随机反向传播优化合并参数向量 $\theta$。这种目标避免了像素预测，但该下界能够高效提取的信息量有限\citep{mcallester2018ncelimit}。在实验中，我们对奖励预测、图像重建和对比目标进行了经验比较，结果见 \cref{fig:repr-small}。

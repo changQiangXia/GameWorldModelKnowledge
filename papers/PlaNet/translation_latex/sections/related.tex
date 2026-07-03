@@ -1,0 +1,6 @@
+\section{有关工作}
+\label{related_work}
+
+以往基于模型的强化学习研究主要集中在低维状态空间中的规划\linebreak \citep{gal2016deeppilco,higuera2018synthesizing,henaff2018planbybackprop,chua2018pets}、结合基于模型与无模型方法优势的混合方法\citep{kalweit2017blending,nagabandi2017mbmf,weber2017i2a,kurutach2018modeltrpo,buckman2018steve,ha2018worldmodels,wayne2018merlin,igl2018dvrl,srinivas2018upn}，以及不进行规划的纯视频预测\citep{oh2015atari,krishnan2015deepkalman,karl2016dvbf,chiappa2017recurrent,babaeizadeh2017sv2p,gemici2017temporalmemory,denton2018stochastic,buesing2018dssm,doerr2018prssm,gregor2018tdvae}。\Cref{sec:more_related_work} 对这些相互独立的研究方向作了更详细的回顾。
+
+真正展示出“从像素输入出发，用学习到的动力学模型成功规划”的工作相对较少。机器人领域主要使用面向规划的视频预测模型\citep{agrawal2016poking,finn2017foresight,ebert2018foresight,zhang2018solar}，这些模型处理真实世界中的视觉复杂性，并解决抓取、推动物体等简单夹爪任务。相比之下，本文关注模拟环境，并利用潜在空间规划扩展到更大的状态和动作空间、更长的规划时域，以及稀疏奖励任务。E2C \citep{watter2015e2c} 和 RCE \citep{banijamali2017rce} 将图像嵌入潜在空间，在其中学习局部线性的潜在转移，并使用 LQR 规划动作。这些方法可以从图像中平衡模拟 cartpole、控制双连杆机械臂，但难以继续扩展。我们放宽了这些模型的 Markov 假设，使方法适用于部分可观测场景，并在包含更长规划时域、接触动力学和稀疏奖励的更困难环境中给出结果。

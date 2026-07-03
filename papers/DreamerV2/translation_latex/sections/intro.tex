@@ -1,0 +1,10 @@
+\section{导言}
+\label{sec:intro}
+
+\input{figures/first/figure}
+
+要在未知环境中成功行动，强化学习智能体需要随着时间学习环境知识。世界模型提供了一种明确表示：它把智能体对环境的认识编码为可预测未来的模型。相比依靠试错学习的无模型强化学习，世界模型有助于泛化，并能预测候选动作的结果，从而支持规划\citep{sutton1991dyna}。由于能够捕捉环境的一般性质，世界模型已被证明可用于迁移到新任务\citep{byravan2019ivg}、定向探索\citep{sekar2020plan2explore}，以及从离线数据集中泛化\citep{yu2020mopo}。当输入是高维图像时，潜在动力学模型会在抽象潜在空间中向前预测\citep{watter2015e2c,ha2018worldmodels,hafner2018planet,zhang2018solar}。相比预测图像，预测紧凑表示被认为可以减少误差累积；同时，较小的内存占用也允许在单个 GPU 上并行进行数千次预测\citep{hafner2018planet,hafner2019dreamer}。基于这一思路，近期的 Dreamer 智能体\citep{hafner2019dreamer} 已经能够从图像输入解决多种连续控制任务。
+
+尽管世界模型具有这些优势，但在最具竞争力的基准上，它们此前仍难以与最先进的无模型算法竞争。成熟的 Atari 基准\citep{bellemare2013ale} 长期以来主要依赖 DQN \citep{mnih2015dqn}、A3C \citep{mnih2016a3c}、Rainbow \citep{hessel2018rainbow} 等无模型算法达到人类水平。研究者已经多次尝试为 Atari 游戏学习准确的世界模型，但尚未得到有竞争力的性能\citep{oh2015atari,chiappa2017recenvsim,kaiser2019simple}。另一方面，近期提出的 MuZero 智能体\citep{schrittwieser2019muzero} 表明，在大量工程投入和计算预算支持下，规划可以在棋盘游戏和确定性 Atari 游戏中取得很强性能。不过，其实现并未公开，即便只在 GPU 上训练一个智能体也需要两个多月，对多数研究团队并不现实。
+
+本文提出 DreamerV2，这是首个完全在单独训练的世界模型中学习行为、并在 Atari 基准上达到人类水平的强化学习智能体，如 \cref{fig:first} 所示。智能体能够完全在世界模型中学到成功行为，说明该世界模型已经较准确地表示了环境。为此，我们对 Dreamer 智能体\citep{hafner2019dreamer} 做了若干小改动，例如使用离散潜变量，并在 KL 损失中平衡不同项。在单个 GPU 和单个环境实例下，DreamerV2 超过了顶级单 GPU Atari 智能体 Rainbow \citep{hessel2018rainbow} 和 IQN \citep{dabney2018iqn}；这些方法建立在多年无模型强化学习研究之上\citep{van2015ddqn,schaul2015prioritizedreplay,wang2016duelingdqn,bellemare2017c51,fortunato2017noisynets}。此外，这些算法中的若干机制与我们的世界模型互补，未来可以整合进 Dreamer 框架。为严格比较算法，我们同时报告相对于人类玩家\citep{mnih2015dqn} 和人类世界纪录\citep{toromanoff2019atarirecords} 的归一化得分，并给出今后报告分数的建议。

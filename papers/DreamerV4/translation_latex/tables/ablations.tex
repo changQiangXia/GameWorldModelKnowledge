@@ -1,0 +1,34 @@
+\begin{table}[tb!]
+\centering
+\vspace*{-2ex}
+\begin{mytabular}{
+ colspec = {| L{15em} | C{5.5em} C{5.5em} C{5.5em} |},
+ row{1} = {font=\bfseries},
+ stretch=0.9,
+}
+
+\toprule
+模型&训练步/秒&推理 FPS(\rlap{$\uparrow$)} &质量 FVD(\rlap{$\downarrow$)} \\
+\midrule
+
+Diffusion forcing Transformer& 9.8 & \o0.8 & 306 \\ % model1
++ 采样步骤减少($K=4$) & 9.8 & \o9.1 & 875 \\ % model1
++ Shortcut 模型& 9.8 & \o9.1 & 329 \\ % model2
++ X 预测& 9.8 & \o9.1 & 326 \\ % model3
++ X 损失& 9.8 & \o9.1 & 151 \\ % model4
++ ramp 权重& 9.8 & \o9.1 & 102 \\ % model5
++ 交替批次长度& 1.5 & \o9.1 & \o80 \\ % model6
++ 长上下文每4层& 0.6 & 18.9 & \o70 \\ % model7
++ GQA 组合键& 0.5 & 23.2 & \o71 \\ % model8
++ 时间因子化长上下文& 0.4 & 30.1 & \o91 \\ % model9
++ register token& 0.5 & 28.9 & \o91 \\ % model10
++ 更多空间 token($N_\mathrm{z}=128$) & 0.8 & 25.7 & \o66 \\ % model11
++ 更多空间 token($N_\mathrm{z}=256$) & 1.7 & 21.4 & \o57 \\ % model12
+\bottomrule
+
+% Ours with vpred: 123.75
+
+\end{mytabular}
+\caption{交互模型设计选择。\method 基于 shortcut forcing 目标和高效 Transformer 架构，组合多种已知技术，实现准确且快速的交互式生成。从$N_\mathrm{z}=64$个空间 token 和$K=64$个采样步骤开始，我们逐步加入目标函数和架构改动，并在可行时增加空间 token 数。推理速度在单张 H100 GPU 上测得；最终世界模型同时具备较高模型容量和推理效率。}
+\label{tab:ablations}
+\end{table}

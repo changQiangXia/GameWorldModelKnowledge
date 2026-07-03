@@ -1,0 +1,46 @@
+\begin{figure*}[t]
+\providecommand{\width}{}
+\renewcommand{\width}{0.28\textwidth}
+\providecommand{\path}{}
+\renewcommand{\path}{score_model}
+\captionsetup[subfigure]{position=above,labelformat=empty,margin={1em,0em},skip=-.1em}
+\centering\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cartpole Swing Up}
+\includegraphics[width=\textwidth]{\path/cartpole_swingup}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Reacher Easy}
+\includegraphics[width=\textwidth]{\path/reacher_easy}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cheetah Run}
+\includegraphics[width=\textwidth]{\path/cheetah_run}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{.7em}\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Finger Spin}
+\includegraphics[width=\textwidth]{\path/finger_spin}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cup Catch}
+\includegraphics[width=\textwidth]{\path/cup_catch}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Walker Walk}
+\includegraphics[width=\textwidth]{\path/walker_walk}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{1em}\hspace{1em}
+\begin{subfigure}[t]{.75\textwidth}
+\centering
+\includegraphics[width=\textwidth]{\path/legend}
+\end{subfigure}\hfil%
+\caption{将 \method 与无模型算法和其他模型设计进行比较。图中展示测试性能随已收集回合数的变化。我们将使用 RSSM（\cref{sec:model}）的 \method 与纯确定性模型（GRU）和纯随机模型（SSM）比较。RNN 不使用潜在过冲，因为它没有随机潜变量。曲线表示中位数，阴影区域表示在 5 个随机种子和 10 条轨迹上得到的第 5 到第 95 百分位范围。由于奖励稀疏，其中两个任务的阴影区域较大。}
+\label{fig:score_model}
+\end{figure*}

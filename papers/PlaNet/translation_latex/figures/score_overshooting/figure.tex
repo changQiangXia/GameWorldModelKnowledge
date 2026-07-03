@@ -1,0 +1,46 @@
+\begin{figure*}[h!]
+\providecommand{\width}{}
+\renewcommand{\width}{0.32\textwidth}
+\providecommand{\path}{}
+\renewcommand{\path}{score_overshooting}
+\captionsetup[subfigure]{position=above,labelformat=empty,margin={1em,0em},skip=-.1em}
+\centering\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cartpole Swing Up}
+\includegraphics[width=\textwidth]{\path/cartpole_swingup}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Reacher Easy}
+\includegraphics[width=\textwidth]{\path/reacher_easy}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cheetah Run}
+\includegraphics[width=\textwidth]{\path/cheetah_run}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{.7em}\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Finger Spin}
+\includegraphics[width=\textwidth]{\path/finger_spin}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cup Catch}
+\includegraphics[width=\textwidth]{\path/cup_catch}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Walker Walk}
+\includegraphics[width=\textwidth]{\path/walker_walk}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{1em}\hspace{1em}
+\begin{subfigure}[t]{.82\textwidth}
+\centering
+\includegraphics[width=\textwidth]{\path/legend}
+\end{subfigure}\hfil%
+\caption{我们在本文提出的 RSSM 以及另一个称为 DRNN 的模型上，比较标准变分目标与潜在过冲。DRNN 使用两个 RNN 分别作为编码器和解码器，中间包含一段随机状态序列。潜在过冲能显著提升 DRNN 以及其他测试过的模型的性能（图中未展示），但会使 RSSM 的性能略有下降。曲线表示中位数，阴影区域表示在 5 个随机种子和 10 条轨迹上得到的第 5 到第 95 百分位范围。}
+\label{fig:score_overshooting}
+\end{figure*}

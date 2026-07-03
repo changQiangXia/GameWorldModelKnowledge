@@ -1,0 +1,122 @@
+\clearpage
+
+\section*{方法}
+
+\subsection*{基线}
+
+我们采用近端策略优化（Proximal Policy Optimization, PPO）算法\citep{schulman2017ppo} 作为基线；PPO 已成为该领域的标准选择，适合在所有基准上用固定超参数与 Dreamer 比较。公开 PPO 实现很多，且任务性能差异较大\citep{huang2022ppodetails}。为确保比较能代表 PPO 在跨领域固定超参数下可达到的较高性能，我们选择 Acme 框架中的高质量 PPO 实现\citep{hoffman2020acme}，并按 \citet{huang2022ppodetails,andrychowicz2020whatmatters} 的建议选取 \cref{tab:hparams_ppo} 中的超参数；此外，我们还调整 epoch batch size，使其足以适配复杂环境\cite{cobbe2020procgen}，并调节学习率和熵系数。折扣因子与 Dreamer 保持一致，因为该设置跨领域表现良好，也是文献中的常见选择\citep{kapturowski2018r2d2,schrittwieser2019muzero}。我们采用表现优于替代架构的 IMPALA 网络架构\citep{cobbe2020procgen}，并将 minibatch size 设为单张 A100 GPU 可容纳的最大值。我们在 ProcGen 基准上验证 PPO 实现和超参数；该基准已有 PPO 作者报告的高度调优 PPO 结果\citep{cobbe2021ppg}。结果显示，我们的实现与该性能参考相当，或略高于它。
+
+\input{tables/hparams_ppo}
+
+对于 Minecraft，我们额外调参并运行 IMPALA 和 Rainbow 算法，因为文献中尚未报告从零开始的端到端学习能够成功完成该任务\citep{guss2019minerl}。这些算法均采用 Acme 实现\citep{hoffman2020acme}，并使用与 PPO 相同的 IMPALA 网络；我们调节了学习率和熵正则项。对于其余基准，我们与结果章节中引用的、文献报告的调优专家算法进行比较。
+
+\vspace*{-3ex}
+\subsection*{实现}
+
+\paragraph{经验回放}
+Dreamer 使用带在线队列的均匀回放缓冲区实现\citep{schmitt2020laser}。具体而言，每个 minibatch 先由互不重叠的在线轨迹构成，再用从回放缓冲区均匀采样的轨迹补齐。数据收集时，我们将潜在状态写入回放缓冲区，用于在重放轨迹上初始化世界模型；训练 rollout 产生的新潜在状态也会写回缓冲区。
+优先经验回放\citep{schaul2015prioritized} 被部分对比专家算法使用，我们也发现它可以提升 Dreamer 的性能。但为简化实现，本文实验采用均匀回放。
+
+训练量通过回放比率参数化。回放比率表示每从环境收集一个时间步，需要训练多少个时间步，不计动作重复。将回放比率除以 minibatch 中的时间步数，再除以动作重复数，就得到梯度步数与环境步数的比例。例如，在 Atari 上动作重复为 4、batch 形状为 $16 \times 64$ 时，回放比率 32 对应每 128 个环境步执行 1 个梯度步，或在 200M 环境步上执行 1.5M 个梯度步。
+
+\paragraph{优化器}
+我们使用自适应梯度裁剪（Adaptive Gradient Clipping, AGC）\citep{brock2021agc}：若某个张量的梯度范数超过对应权重矩阵 L2 范数的 $30\%$，则对其进行裁剪，默认 $\eps=10^{-3}$。AGC 将裁剪阈值与损失尺度解耦，因此可以改变损失函数或损失尺度，而无需重新调节裁剪阈值。裁剪后的梯度由 LaProp 优化器\citep{ziyin2020laprop} 应用，设置 $\eps=10^{-20}$，默认参数 $\beta_1=0.9$ 和 $\beta_2=0.99$。LaProp 先用 RMSProp 归一化梯度，再用动量平滑；不同于 Adam，它不是在原始梯度上同时计算动量和归一化项\citep{kingma2014adam}。这一简单改动允许使用更小的 epsilon，并避免我们在 Adam 中偶尔观察到的不稳定性。
+
+\paragraph{分布}
+编码器、动力学预测器和 actor 的分布均采用 unimix：即 $99\%$ 的预测 softmax 输出与 $1\%$ 的均匀分布混合\citep{gruslys2017reactor}，以避免零概率和无穷大的对数概率。
+奖励网络和 critic 网络输出定义在指数间隔分桶 $b \in B$ 上的 softmax 分布，并以 two-hot 编码目标训练：
+
+\eq{
+\operatorname{twohot}(x)_i
+\doteq \begin{cases}
+|b_{k+1} - x| \,/\, |b_{k+1} - b_k| &\text{ if } i=k \\
+|b_{k\hphantom{+1}} - x| \,/\, |b_{k+1} - b_k| &\text{ if } i=k+1 \\
+0 &\text{ else} \\
+\end{cases} \qquad
+k \doteq \sum_{j=1}^{|B|} \operatorname{\delta}(b_j < x)
+\label{eq:twohot}
+}
+
+two-hot 分布的输出权重初始化为零，以确保智能体在初始化时不会产生虚假的奖励和值预测。对于跨越多个数量级的分桶，计算 softmax 分布的期望时求和顺序会影响数值稳定性；正负分桶应分别从小到大求和，再相加。具体实现可参考源代码。
+
+\paragraph{网络}
+图像先通过 stride 为 2 的卷积编码到 $6 \times 6$ 或 $4 \times 4$ 分辨率，再展平；解码时使用 stride 为 2 的转置卷积，并在输出端使用 sigmoid 激活。向量输入先做 symlog 变换，再用 3 层 MLP 编码和解码。actor 与 critic 也使用 3 层 MLP，奖励预测器和 continue 预测器使用 1 层 MLP。
+序列模型采用 GRU\citep{cho2014gru}，其循环权重为 8 个块的块对角结构\citep{van2019blockrnn}，这样可以容纳大量记忆单元，而不会使参数量和 FLOPs 呈二次增长。GRU 每个时间步的输入包括采样潜变量 $z_t$、动作 $a_t$ 和循环状态的线性嵌入，以便在不同块之间交换信息。
+
+\clearpage
+\vspace*{-3\baselineskip}
+\subsection*{基准}
+
+\paragraph{协议}
+\cref{tab:benchmarks} 汇总了各基准设置；对于已有公认协议的基准，我们遵循其标准评估流程。
+Atari \citep{bellemare2013ale} 包含 57 个任务，并使用 sticky actions 设置\citep{machado2018stickyactions}。用于归一化分数的随机和人类参考分数在文献中并不完全一致，我们采用最常见的参考值，并在 \cref{tab:atari} 中列出。
+DMLab\citep{beattie2016dmlab} 包含 30 个任务\citep{espeholt2018impala}，我们使用固定动作空间\citep{hessel2019popart,kapturowski2018r2d2}。由于像部分先前工作那样运行 10B 步不可行，我们在 100M 步处评估。已有公开基线在 100M 步时表现较弱，因此我们改与其 1B 步结果比较，相当于给这些基线 $10\times$ 的数据优势。
+ProcGen 使用 hard 难度和 unlimited level set\citep{cobbe2020procgen}。先前工作在不同步数预算下比较\citep{cobbe2020procgen,cobbe2021ppg}；由于计算成本且没有动作重复，我们在 50M 步处比较。
+对于只使用稀疏奖励的 Minecraft Diamond，我们建立评估协议，在 100M 环境步处报告 episode return，这大约对应 100 天游戏内时间。
+Atari100k\citep{kaiser2019simple} 包含 26 个任务，预算为 400K 环境步，即动作重复后 100K 步。先前工作使用过多种环境设置，\cref{tab:atari100k_setting} 对此做了汇总；本文采用最初提出该基准时的环境设置。
+Visual Control\citep{tassa2018dmcontrol,hafner2019dreamer} 包含 20 个任务，动作重复为 2。
+Proprioceptive Control 采用相同协议，但由于先前工作中可用基线有限，我们排除两个四足机器人任务\citep{yarats2021drqv2}。
+
+\input{tables/benchmarks}
+
+\paragraph{环境实例}
+在早期实验中，我们观察到 Dreamer 和 PPO 的性能都对环境实例数量较为稳健。根据训练机器上可用的 CPU 资源，我们默认使用 16 个环境实例。对于 BSuite，基准要求使用单个环境实例。Atari100K 也使用单个环境实例，因为该基准预算为 400K 环境步，而 Atari 的最大 episode 长度原则上为 432K 环境步。对于 Minecraft，由于环境步进较慢，我们使用 64 个环境并通过远程 CPU worker 加速实验。
+
+\paragraph{随机种子和误差带}
+每个基准上，我们为 Dreamer 和 PPO 各运行 5 个随机种子；例外情况是 ProcGen 因计算限制只运行 1 个种子，BSuite 按基准要求运行 10 个种子，Minecraft 运行 10 个种子以可靠报告获得钻石的运行比例。所有曲线均显示跨种子的平均值，阴影表示一个标准差。
+
+\paragraph{计算设置}
+本文中的所有 Dreamer 和 PPO 智能体都在单张 Nvidia A100 GPU 上训练。Dreamer 默认使用 200M 参数规模的模型。在两个控制套件上，Dreamer 使用速度明显更快的 12M 模型即可达到相同表现，因而更容易被研究者复现。回放比率控制计算成本与数据效率之间的权衡；相关分析见 \cref{fig:ablations}，并据此为每个基准选择与步数预算匹配的设置。
+
+\clearpage
+
+\subsection*{模型规模}
+
+为适配不同计算预算，并分析不同模型规模下的稳健性，我们定义了从 12M 到 400M 参数的一组模型，见 \cref{tab:modelsizes}。这些规模由模型维度参数化，模型维度约按 1.5 倍增长，在 2 的幂次与 2 的幂次乘以 1.5 之间交替，从而得到满足硬件效率要求的 8 的倍数张量形状。
+不同网络组件的规模都由模型维度派生。MLP 的隐藏单元数等于模型维度。序列模型的循环单元数为模型维度的 8 倍，并分成 8 个与 MLP 同规模的块。最靠近数据的卷积编码器和解码器层使用比模型维度少 $16\times$ 的通道数。每个潜变量也使用比模型维度少 $16\times$ 的代码数。隐藏层数量和潜变量数量在所有模型规模中保持不变。
+所有超参数，包括学习率和 batch size，都在不同模型规模之间保持固定。
+
+\input{tables/modelsizes}
+
+\subsection*{Dreamer 前代方法}
+
+本文提出 Dreamer 系列的第三代算法；在需要区分时，我们称其为 DreamerV3。DreamerV1\citep{hafner2019dreamer} 主要面向连续控制，DreamerV2\citep{hafner2020dreamerv2} 在 Atari 上超过人类表现，而 DreamerV3 支持在多样化基准上开箱即用地学习。
+
+DreamerV3 引入的主要改动如下：
+\begin{itemize}
+\item 稳健性技术：观测 symlog、KL balance 和 free bits、对所有分类分布使用 1\% unimix、百分位回报归一化，以及用于奖励头和 critic 的 symexp two-hot 损失。
+\item 网络架构：Block GRU、RMSNorm 归一化、SiLU 激活。
+\item 优化器：自适应梯度裁剪（AGC）以及 LaProp（先 RMSProp 后动量）。
+\item 回放缓冲区：更大的容量、在线队列、存储并更新潜在状态。
+\end{itemize}
+
+\clearpage
+\subsection*{超参数}
+\input{tables/hparams}
+
+\clearpage
+\subsection*{Minecraft}
+\label{sec:mcenv}
+
+\paragraph{游戏描述}
+Minecraft 每月活跃用户约 1 亿，是全球最受欢迎的电子游戏之一。
+游戏包含程序生成的 3D 世界，地貌由平原、森林、丛林、山地、沙漠、针叶林、雪原、冰刺、沼泽、草原、恶地、海滩、石岸、河流和海洋等不同生物群系构成。
+世界由边长约 1 米的方块组成，玩家可以破坏和放置这些方块。
+游戏中约有 30 种生物，玩家可以与其交互或战斗。
+玩家通过收集资源，使用 350 多种配方合成新物品，并沿技术树推进，同时还要保证安全和食物供应以便生存。
+Minecraft 中可以设定许多任务；作为第一步，研究社区主要关注获取钻石这一代表性任务。钻石是位于地下深处的稀有物品，玩家必须沿技术树逐步推进才能获得。
+
+\paragraph{学习环境}
+我们在 MineRL 之上构建 Minecraft Diamond 环境，用于定义平坦的分类动作空间，并修复在人类试玩中发现的原始环境问题。
+例如，破坏钻石矿石时，物品有时会直接进入物品栏，有时则需要从地面拾取。
+原始环境会在破坏钻石矿石时结束 episode，导致许多成功回合在拾取物品之前终止，因此无法得到奖励。
+我们移除了这一提前终止条件，改为在玩家死亡或达到 36,000 步时结束 episode；在 20Hz 控制频率下，这对应 30 分钟。
+另一个问题是跳跃动作必须持续超过一个控制步才能触发跳跃。我们通过在后台保持按键 200ms 来解决。
+该环境基于 MineRL v0.4.4\citep{guss2019minerl} 构建，支持抽象合成动作；Minecraft 版本为 1.11.2。
+
+\paragraph{观测和奖励}
+智能体观测 $64\times64\times3$ 的第一人称图像、包含 400 多种物品数量的物品栏计数向量、episode 开始以来各物品最大持有数量向量（用于指示已达成的里程碑）、表示当前装备物品的 one-hot 向量，以及生命值、饥饿值和氧气值等标量输入。
+我们沿用 MineRL 竞赛环境的稀疏奖励结构\citep{guss2019minerl}，对通向钻石的 12 个里程碑给予奖励，包括获得原木、木板、木棍、工作台、木镐、圆石、石镐、铁矿石、熔炉、铁锭、铁镐和钻石。
+每个物品的奖励在每个 episode 中只发放一次，因此智能体必须学会多次收集某些物品，才能达成下一个里程碑。
+为便于解释回报，我们对每个里程碑给予 $+1$ 奖励，而不是按物品价值缩放奖励。
+此外，每失去一颗心给予 $-0.01$，每恢复一颗心给予 $+0.01$；但我们没有进一步研究这一设计是否有帮助。

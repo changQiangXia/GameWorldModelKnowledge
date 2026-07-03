@@ -1,0 +1,49 @@
+\begin{table}[h!]
+\centering
+\begin{mytabular}{
+  colspec = {| L{15em} | C{6em} | C{10em} |},
+  row{1} = {font=\bfseries},
+}
+
+\toprule
+\textbf{名称} & \textbf{符号} & \textbf{数值} \\
+\midrule
+\multicolumn{3}{l}{\textbf{通用设置}} \\
+\midrule
+回放容量 & --- & $5 \times 10^6\!\!$ \\
+Batch size & $B$ & 16 \\
+Batch length & $T$ & 64 \\
+激活与归一化 & --- & $\operatorname{RMSNorm}+\operatorname{SiLU}$ \\
+学习率 & --- & $4 \times 10^{-5}$ \\
+梯度裁剪 & --- & $\operatorname{AGC}(0.3)$ \\
+优化器 & --- & $\operatorname{LaProp}(\epsilon=10^{-20})$ \\
+\midrule
+\multicolumn{3}{l}{\textbf{世界模型}} \\
+\midrule
+重建损失系数 & $\beta_{\mathrm{pred}}$ & 1 \\
+动力学损失系数 & $\beta_{\mathrm{dyn}}$ & 1 \\
+表征损失系数 & $\beta_{\mathrm{rep}}$ & 0.1 \\
+潜变量 unimix & --- & $1\%$ \\
+Free nats & --- & 1 \\
+\midrule
+\multicolumn{3}{l}{\textbf{Actor-Critic}} \\
+\midrule
+想象时域 & $H$ & 15 \\
+折扣时域 & $1/(1-\gamma)$ & 333 \\
+Return lambda & $\lambda$ & 0.95 \\
+Critic 损失系数 & $\beta_{\mathrm{val}}$ & 1 \\
+Critic 回放损失系数 & $\beta_{\mathrm{repval}}$ & 0.3 \\
+Critic EMA 正则项 & --- & 1 \\
+Critic EMA 衰减 & --- & 0.98 \\
+Actor 损失系数 & $\beta_{\mathrm{pol}}$ & 1 \\
+Actor 熵正则项 & $\eta$ & $3 \times 10^{-4}$ \\
+Actor unimix & --- & $1\%$ \\
+Actor RetNorm 尺度 & $S$ & $\operatorname{Per}(R, 95) - \operatorname{Per}(R, 5)$ \\
+Actor RetNorm 下限 & $L$ & 1 \\
+Actor RetNorm 衰减 & --- & 0.99 \\
+\bottomrule
+
+\end{mytabular}
+\caption{Dreamer 超参数。所有基准均使用相同设置，包括本体感知和视觉输入、连续和离散动作、2D 和 3D 领域。我们不使用超参数退火、优先回放、权重衰减或 dropout。}
+\label{tab:hparams}
+\end{table}

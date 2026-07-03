@@ -1,0 +1,680 @@
+\documentclass[11pt]{article}
+\input{commands}
+
+\title{\vspace*{-1.7ex}在可扩展世界模型中训练智能体\vspace*{-.2ex}}
+
+\date{}
+
+\author{%
+Danijar Hafner*\quad
+Wilson Yan*\quad
+Timothy Lillicrap
+}
+
+
+
+% Chinese translation support
+\usepackage{xeCJK}
+\setCJKmainfont{FandolSong-Regular.otf}[ItalicFont=FandolKai-Regular.otf]
+\setCJKsansfont{FandolHei-Regular.otf}
+\setCJKmonofont{FandolFang-Regular.otf}
+\XeTeXlinebreaklocale "zh"
+\XeTeXlinebreakskip = 0pt plus 1pt
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\makeatletter
+\@ifundefined{captionsetup}{}{%
+ \captionsetup[figure]{name=图}%
+ \captionsetup[table]{name=表}%
+}
+\renewcommand{\fnum@figure}{图~\thefigure}
+\renewcommand{\fnum@table}{表~\thetable}
+\makeatother
+\renewcommand{\refname}{参考文献}
+\renewcommand{\contentsname}{目录}
+\makeatletter
+\AtBeginDocument{%
+ \@ifundefined{crefname}{}{%
+ \crefname{figure}{图}{图}%
+ \Crefname{figure}{图}{图}%
+ \crefname{table}{表}{表}%
+ \Crefname{table}{表}{表}%
+ \crefname{section}{节}{节}%
+ \Crefname{section}{节}{节}%
+ \crefname{appendix}{附录}{附录}%
+ \Crefname{appendix}{附录}{附录}%
+ \crefname{algocf}{算法}{算法}%
+ \Crefname{algocf}{算法}{算法}%
+ }%
+ \@ifundefined{SetAlgorithmName}{}{\SetAlgorithmName{算法}{算法}{算法列表}}%
+}
+\makeatother
+\raggedbottom
+
+\begin{document}
+
+\maketitle
+\pagestyle{fancy}
+
+% \linenumbers
+% \begin{adjustwidth}{1cm}{1cm}
+\vspace*{-2ex}
+% \begin{hyphenrules}{nohyphenation}
+{\ignorespaces\bfseries%
+世界模型可以从视频中学习通用知识，并模拟经验来支持想象中的行为训练，从而用于构建智能体。
+然而，已有世界模型仍难以准确预测复杂环境中的物体交互。
+% Slow generation further limits their practicality for training agents.
+本文提出 \method{}，这是一种可扩展智能体，能够在快速且准确的世界模型内部通过强化学习解决控制任务。
+在复杂电子游戏 Minecraft 中，该世界模型可以准确预测物体交互和游戏机制，并大幅超过已有世界模型。
+借助 shortcut forcing 目标和高效 Transformer 架构，世界模型能够在单个 GPU 上进行实时交互式推理。
+此外，世界模型只需少量数据即可学习通用的动作条件，因此可以从多样化的无标签视频中提取大部分知识。
+我们提出一个新的挑战：仅从离线数据中在 Minecraft 里获得钻石。这一设定贴近机器人等实际应用，因为直接从环境交互中学习往往既不安全也很慢。
+该任务要求智能体从原始像素出发，选择超过 20,000 步鼠标和键盘动作序列。
+通过在想象中学习行为，\method{} 成为首个完全依靠离线数据、无需环境交互即可在 Minecraft 中获得钻石的智能体。
+我们的工作给出了可扩展的想象训练方案，也向更通用的智能体迈出了一步。
+}
+% \end{hyphenrules}
+% \end{adjustwidth}
+
+\vfill
+\vfill
+\input{figures/imag/figure}
+\vfill
+\clearpage
+
+\section{导言}
+
+要在具身环境中解决复杂任务，智能体需要理解世界，并据此选择有效动作。
+世界模型提供了一种有前景的途径：它从机器人或游戏玩家等智能体的视角出发，学习预测候选动作的未来结果。
+借助这种预测能力，智能体可以在想象中通过规划或强化学习来选择动作。
+此外，世界模型原则上可以从固定数据集学习，因此智能体能够完全在想象中训练，而不必进行在线交互。
+这种离线优化对许多实际应用都很重要；例如在物理世界的机器人任务中，让尚未训练好的智能体在线试错往往并不安全。
+
+以 Dreamer~3 为代表的世界模型智能体，是目前游戏和机器人领域中表现较强、也较稳健的一类强化学习算法\citep{dreamerv3,wu2023daydreamer,hansen2023tdtmpc2,alonso2024diffusion,schrittwieser2019muzero,hessel2021muesli}。
+这些模型在各自狭窄环境中速度快、精度高，但其架构难以拟合复杂的真实世界分布。
+另一方面，Genie~3 等可控视频模型已经在多样化真实视频和游戏数据上训练，并能够生成多样场景和简单交互\citep{genie3,tu2025playerone,he2025matrix,sun2025virtual,bai2025whole,team2025yan}。
+这类模型通常基于扩散 Transformer 等可扩展架构\citep{peebles2023dit,diffusionforcing}。
+不过，它们仍难以准确学习物体交互和游戏机制中的精细物理规律，因此对训练成功智能体的帮助有限。
+同时，它们常常需要多块 GPU 才能实时模拟单个场景，这也削弱了其用于想象训练的实用性。
+
+本文提出 \method{}，一种可扩展智能体，可以在快速且准确的世界模型中通过想象训练解决控制任务。
+在具有挑战性的电子游戏 Minecraft 中，\method{} 是首个完全基于标准离线数据集、无需环境交互即可获得钻石的智能体。
+\method{} 利用新的 shortcut forcing 目标和高效 Transformer 架构，既能准确学习复杂物体交互，又支持实时人工交互和高效想象训练。
+实验表明，该世界模型能够准确预测 Minecraft 中广泛的语义交互，并大幅超过已有世界模型。
+此外，\method{} 可以使用大量无标签视频训练，并且只需要少量视频与动作对齐数据。
+这表明，未来可以从没有动作标签的多样化网络视频中学习通用世界知识。
+
+我们的贡献概述如下:
+
+\begin{itemize}
+\item 我们提出 \method{}，一种可扩展智能体，能够在世界模型内部通过想象训练学习解决具有挑战性的控制任务。
+\item \method{} 是首个仅从离线数据中在 Minecraft 收集钻石的智能体；在使用数据量少 100$\times$ 的情况下，它显著超过了 OpenAI 的 VPT 离线智能体\citep{vpt}。
+\item 我们引入高容量世界模型，通过 shortcut forcing 目标和高效 Transformer 架构，在单个 GPU 上实现实时推理。
+\item 我们证明，该世界模型能够准确预测 Minecraft 中广泛的物体交互和游戏机制，并显著超过已有世界模型。
+\item 我们证明，世界模型可以从无标签视频中学习，并且只需少量对齐数据即可学习具有较强泛化能力的动作条件。
+\item 我们通过广泛的消融实验衡量目标函数和架构改进的贡献。
+\end{itemize}
+
+\section{背景情况}
+\label{sec:background}
+
+\paragraph{流匹配}
+
+我们的世界模型基于扩散模型范式\citep{sohl2015deep,ddpm}，网络$f_\theta$在给定损坏版本$x_\sig$时学习恢复数据点$x_1$。
+信号水平$\sig \in [0, 1]$决定噪声与数据的混合比例，并在训练时随机采样；其中$\sig=0$对应纯噪声，$\sig=1$对应干净数据。
+我们采用流匹配形式\citep{flowmatching,rectifiedflow}，因为它较为简洁：网络预测指向干净数据的速度向量$v = x_1 - x_0$：
+
+\eq{
+\begin{gathered}
+x_\sig = (1 - \sig)\,x_0 + \sig\,x_1 \qquad
+x_0 \sim \operatorname{N}(0, \mathbb{I}) \qquad
+x_1 \sim \mathcal{D} \qquad
+\sig \sim \p(\sig) \\[1.5ex]
+\mathcal{L}(\theta) = \| f_\theta(x_\sig,\sig) - (x_1 - x_0) \|^2
+\end{gathered}
+}
+
+信号水平通常从均匀分布或 logit-normal 分布中采样\citep{sd3}。
+推理时，采样过程从纯噪声向量$x_0$开始，并通过$K$个步长为$d = 1/K$的采样步骤，迭代地将其变为干净数据点$x_1$：
+
+\eq{
+x_{\sig+\dis} = x_\sig + f_\theta(x_\sig,\sig)\,\dis \qquad
+x_0 \sim \operatorname{N}(0, \mathbb{I})
+}
+
+\paragraph{Shortcut 模型}
+
+Shortcut 模型\citep{shortcut} 不仅以信号水平$\sig$为条件，也以目标步长$\dis$为条件。
+这使模型能够在推理时选择步长，并只用少量采样步骤和神经网络前向传播就生成数据点。
+在最小步长$\dis_\mathrm{min}$下，shortcut 模型使用流匹配损失训练。
+对于更大的步长$\dis_\mathrm{min}<\dis \leq 1$，shortcut 模型使用 bootstrap 损失训练，将一个大步分解为两个小步，其中$\operatorname{sg}(\cdot)$表示停止梯度：
+
+\eq{
+\begin{gathered}
+
+x_0 \sim \operatorname{N}(0, \mathbf{I}) \qquad
+x_1 \sim \mathcal{D} \qquad
+\sig,\dis \sim \p(\sig,\dis) \\[1.2ex]
+
+b' = f_\theta(x_\sig,\sig,\dis/2) \qquad
+b'' = f_\theta(x',\sig+\dis/2,\dis/2) \qquad
+x' = x_\sig + b'\,\dis/2 \\
+
+\mathcal{L}(\theta) = \| f_\theta(x_\sig,\sig,\dis) - v_\mathrm{target} \|^2
+\qquad
+v_\mathrm{target} = \begin{cases}
+x_1 - x_0 &\text{if } \dis=\dis_\mathrm{min} \\
+\sg(b' + b'')/2 &\text{else}
+\end{cases}
+
+\end{gathered}
+}
+
+给定最大采样步数$K_\mathrm{max}$后，步长从二的幂次集合中均匀采样，并由此定义最小步长$\dis_\mathrm{min}=1/K_\mathrm{max}$。信号水平则在当前步长可到达的网格上均匀采样：
+
+\eq{
+\dis \sim 1/\operatorname{U}(\{1, 2, 4, 8, \dots, K_{\mathrm{max}}\}) \qquad
+\sig \sim \operatorname{U}(\{0, 1/\dis, \dots, 1 - 1/\dis\})
+}
+
+推理时，可以将模型条件设为$\dis=1/K$，从而指定目标采样步数$K$。由于模型已经学会预测每一步的终点，这不会受到离散化误差影响。实践中，shortcut 模型只用 2 或 4 个采样步骤就能生成高质量样本，而典型扩散模型通常需要 64 步或更多。
+
+\paragraph{Diffusion forcing}
+
+对于序列数据，diffusion forcing\citep{diffusionforcing} 为数据序列中的每个时间步分配不同的信号水平，从而得到一个被扰动的序列。
+这样可以在序列中的所有时间步上施加损失：每个时间步既是去噪任务，也为后续时间步提供历史上下文。
+推理时，diffusion forcing 支持灵活的噪声模式，例如在给定干净或轻微加噪历史的情况下生成下一帧。
+
+\pagebreak
+\section{World Model 智能体}
+
+\input{algos/agent}
+我们提出 \method：一个可扩展智能体，它通过在快速且准确的世界模型内部进行强化学习，学习解决复杂控制任务。
+如\cref{fig:model}所示，该智能体由分词器和动力学模型组成。
+分词器将视频帧压缩为连续表示；动力学模型在给定交错动作的情况下预测这些表示。二者使用相同的高效 Transformer 架构。
+分词器通过掩码自动编码训练，动力学模型则通过 shortcut forcing 目标训练，以便只用少量前向传播完成交互式生成，并防止误差随时间累积。
+如\cref{alg:agent}所概述，我们首先在视频和动作上预训练分词器和世界模型，然后通过交错加入任务嵌入，将策略和奖励模型微调进世界模型，最后通过想象训练对策略进行后训练。
+为了训练一个具有多种模态和多个输出头的单一动力学 Transformer，我们用各损失项均方根（RMS）的运行估计来归一化所有损失。
+
+\input{figures/method/figure}
+
+\pagebreak
+\subsection{因果分词器}
+\label{sec:tokenizer}
+
+分词器将原始视频压缩为连续表示序列，供动力学模型使用和生成。
+它由编码器、解码器以及二者之间的瓶颈组成。
+两个组件在时间维度上都是因果的，因此既能进行时间压缩，又能在交互式推理中逐帧解码。
+
+\paragraph{架构}
+
+我们使用后文介绍的高效 Transformer 架构。
+每个时间步包含当前图像的 patch token 和学习得到的 latent token。
+经过编码器后，从 latent token 中读出表示，并通过线性投影降到较小的通道维度，再接 \texttt{tanh} 激活。
+在解码器中，该表示被投影回模型维度，并与学习得到的 token 拼接，用于读出图像 patch。
+为了灵活整合多种输入模态（如果存在），编码器允许 latent token 关注所有模态，而每种模态只在自身内部进行注意。
+相应地，每个解码器模态既关注自身内部，也关注 latent；latent 则只关注自身内部。
+
+\paragraph{掩码自动编码}
+
+我们使用直接的重建目标训练分词器，包括均方误差和 LPIPS\citep{lpips} 损失。
+为了简化两个损失项之间的权衡，我们采用下文介绍的损失归一化。
+
+\eq{
+\mathcal{L}(\theta) =
+\mathcal{L}_{\mathrm{MSE}}(\theta) +
+0.2\,\mathcal{L}_{\mathrm{LPIPS}}(\theta)
+\label{eq:tok}
+}
+
+我们通过丢弃输入到编码器的 patch 来进行掩码自动编码，从而改进表示\citep{mae,chen2025maetok}。
+不同图像的 dropout 概率随机采样为$p \sim U(0, 0.9)$。在每张图像中，patch 以该概率被一个学习得到的嵌入替换，因此分词器有时也会在推理所使用的$p=0$情形下接受训练。
+我们发现，MAE 训练可以提升动力学模型生成视频的空间一致性。
+
+\subsection{交互式动力学}
+\label{sec:dynamics}
+
+动力学模型在动作与冻结分词器产生的表示交错组成的序列上运行。
+它使用 shortcut forcing 目标训练，使模型能够以每个生成帧$K=4$次前向传播实现快速交互式推理。
+
+\paragraph{架构}
+
+动力学模型在交错的观测块和动作块上使用我们的高效 Transformer 架构。
+表示被线性投影为$S_\mathrm{z}$个空间 token，并与$S_\mathrm{r}$个学习得到的 register token\citep{vitregister} 拼接，同时加入一个用于 shortcut 信号水平和步长的单独 token。
+由于信号水平和步长是离散的，我们分别用离散嵌入表编码它们，并拼接其通道。
+动作可以包含多个组件，如鼠标和键盘。
+我们将每个动作组件分别编码为$S_\mathrm{a}$个 token，并将结果与一个学习嵌入相加。
+连续动作组件使用线性投影，离散或二值动作组件使用嵌入表。
+在训练无标签的视频时，只使用已学到的嵌入。
+
+\paragraph{Shortcut forcing}
+
+为提高训练和推理效率，我们用 shortcut forcing 目标训练动力学模型。该目标建立在 diffusion forcing\citep{diffusionforcing} 和 shortcut 模型\citep{shortcut} 之上，二者见\cref{sec:background}。
+我们在数据空间中定义目标，以避免高频网络输出带来的累积误差，并引入一个简单的损失权重，使模型容量集中到学习信号最强的损失项上。
+动力学模型以交错动作序列$a=\{a_t\}$、离散信号水平$\sig=\{\sig_t\}$、步长$\dis=\{\dis_t\}$以及被扰动的表示$\tilde{z}=\{z_t^{(\tau_t)}\}$为输入，并预测干净表示$z_1=\{z_t^1\}$。
+注意，$t \in [1,T]$表示序列时间步，而$\tau_t \in [0, 1]$表示该步的信号水平。
+
+\eq{
+\begin{gathered}
+z_0 \sim \operatorname{N}(0, \mathbf{1}) \qquad
+z_1 \sim \mathcal{D} \qquad
+\sig, \dis \sim \p(\sig, \dis) \qquad
+\sig, \dis \in [0, 1]^T \\[1ex]
+\hat{z}_1 = f_\theta(\tilde{z},\sig,\dis,a) \qquad
+\tilde{z} = (1-\sig)\,z_0 + \sig\,z_1
+\end{gathered}
+}
+
+Shortcut 模型通常将网络参数化为预测速度$v = x_1 - x_0$，称为 v-prediction\citep{kingma2023understanding}。
+当输出作为一个整体块联合生成时，例如图像或视频生成模型，这种方法效果很好。
+然而，v-prediction 会促使网络产生高频输出。
+在逐帧迭代生成长视频时，这些细微误差可能随时间累积。
+相反，我们发现，将网络参数化为预测干净表示，也就是 x-prediction，可以支持任意长度的高质量 rollout。
+在 x-space 中计算 flow 损失很直接\citep{kingma2023understanding}。为了计算 bootstrap 损失项，我们将网络输出转换到 v-space，并把所得损失缩放回 x-space\footnote
+网络输出转换为$\hat{v}_\sig = (\hat{x}_1 - x_\sig) / (1 - \sig)$。x-space 和 v-space 中的 MSE 满足$\|\hat{x}_1 - x_1\|^2_2 = (1-\sig)^2\|\hat{v}_\sig-v_\sig\|^2_2$，因此使用$(1-\sig)^2$乘子，将 bootstrap 损失调整到与 x-space flow 损失相近的范围。 :
+
+\eq{
+\begin{gathered}
+\begin{aligned}
+b' &= (f_\theta(\tilde{z},\sig,\dhalf,a) - z_\sig)/(1-\sig) \qquad
+z' = \tilde{z} + b'\,\dhalf \\
+b'' &= (f_\theta(z',\sig+\dhalf,\dhalf,a) - z')/(1-(\sig+\dhalf))
+\end{aligned} \\
+\mathcal{L}(\theta) = \begin{cases}
+\|\hat{z}_1 - z_1\|_2^2 &\text{if } \dis=\dis_\mathrm{min} \\
+(1-\sig)^2 \| (\hat{z}_1-\tilde{z})/(1-\sig) - \sg(b_1 + b_2)/2 \|_2^2 &\text{else} \\
+\end{cases}
+\end{gathered}
+\label{eq:dyn}
+}
+
+低信号水平包含的学习信号较少，因为 flow matching 项会退化为预测数据集均值；bootstrap matching 项通常也更容易优化，因为它相比带噪声的 flow matching 项具有确定性目标。
+为了让模型容量集中在学习信号最强的信号水平上，我们提出 \texttt{ramp} 损失权重，使其随信号水平$\sig$线性增加，其中$\sig=0$对应全噪声，$\sig=1$对应干净数据：
+
+\eq{
+w(\sig) = 0.9 \sig + 0.1
+}
+
+推理时，动力学模型支持不同的噪声模式。
+我们沿时间自回归采样，并使用 shortcut 模型以$K=4$个采样步骤生成每帧表示，对应步长为$\dis=1/4$。
+我们将传给动力学模型的历史输入轻微扰动到信号水平$\sig_\mathrm{ctx}=0.1$，使模型对自身生成中的小缺陷更鲁棒。
+
+\subsection{想象训练}
+
+为了解决控制任务，我们首先调整了预先训练过的世界模型，以预测以多个任务之一为条件的数据集的动作和奖励。
+为此，我们在世界模型 Transformer 中插入智能体 token，作为额外模态，并将其与图像表示、动作和 register token 交错排列。
+智能体 token 接收任务嵌入作为输入，我们用它们通过 MLP 头预测策略和奖励模型。
+智能体 token 可以关注自身和所有其他模态，但其他模态不能反向关注智能体 token。
+这种约束有助于避免世界模型中的因果混淆，因为未来预测只能直接受到动作影响，而不能直接受到当前任务影响。
+为了超越数据集中已有的策略，我们随后通过想象训练微调策略，在世界模型生成的 rollout 上进行强化学习，并使用一个额外的价值头。
+
+\paragraph{行为克隆和奖励模型}
+
+在以动作条件视频预测预训练世界模型之后，第二个训练阶段学习任务条件策略和奖励模型。
+给定视频数据集$x=\{x_t\}$，其被编码为表示$z=\{z_t\}$，并带有动作$a=\{a_t\}$、任务$q=\{q_t\}$和标量奖励$r=\{r_t\}$。我们在任务输出嵌入$h_t$上训练策略头和奖励头，使用长度为$L=8$的多 token 预测（MTP）\citep{gloeckle2024mtp}：
+
+\eq{
+\mathcal{L}(\theta) =
+- \sum_{n=0}^{L} \p<\ln p_\theta>(a_{t+n} | h_t)
+- \sum_{n=0}^{L} \p<\ln p_\theta>(r_{t+n} | h_t)
+\label{eq:bcrm}
+}
+
+为了保留已有能力，我们沿用预训练设置并加入这一额外损失，因此表示仍带有噪声，同时继续施加视频预测损失。
+策略头和奖励头都用小型 MLP 参数化，并为每个 MTP 距离使用一个输出层。
+按照 Dreamer~3 的做法，奖励头被参数化为 symlog/symexp two-hot 输出\citep{dreamerv3}，以稳健学习不同数量级的随机奖励。
+策略头根据数据集动作空间，被参数化为分类分布或向量化二值分布。
+
+\paragraph{强化学习}
+
+为了让策略超越数据集中展示的行为，我们继续在想象 rollout 上用强化学习训练它，以最大化学到的奖励模型。
+不同于需要与环境交互的在线强化学习，我们的策略完全在世界模型内部学习，因此可以离线改进。
+我们首先初始化一个价值头，并复制一份冻结的策略头作为行为先验。
+训练时只更新策略头和价值头，并保持 Transformer 冻结。\footnote{微调整个 Transformer 可以带来少量额外收益，但计算成本更高。为保持其功能，需要在想象训练期间同时施加动力学、策略先验和奖励损失。}
+%
+想象 rollout 从早期训练阶段使用的数据集上下文开始。
+不同于前几代 Dreamer，我们只从每个上下文启动一个 rollout，以优先保证数据多样性并减少内存消耗。
+rollout 通过用 Transformer 自回归展开生成：从 flow 头采样表示$z=\{z_t\}$，从策略头采样动作$a=\{a_t\}$。
+随后用奖励头为轨迹标注奖励$r=\{r_t\}$，并用价值头标注价值$v=\{v_t\}$。
+
+价值头被训练为预测未来奖励的折扣和，使策略能够优化超出想象视野之外的回报。
+它使用 symlog/symexp two-hot 输出，以便在不同价值尺度上稳健学习\citep{dreamerv3}。
+我们使用时序差分学习（TD-learning）\citep{sutton1988td} 训练价值头，预测沿序列由预测奖励和价值计算出的$\lambda$-return，其中$\gamma=0.997$是折扣因子，$c_t$表示非终止状态：
+
+\eq{
+\mathcal{L}(\theta) = -\sum_{t=1}^T \ln\p<p_\theta>(R^\lambda_t | s_t)
+\qquad
+R^\lambda_t = r_t + \gamma c_t \big((1-\lambda)v_t + \lambda R^\lambda_{t+1}\big)
+\qquad
+R^\lambda_T = v_T
+\label{eq:val}
+}
+
+不同于前几代 Dreamer，策略头使用 PMPO\citep{abdolmaleki2024pmpo} 学习。这是一个鲁棒强化学习目标，只使用优势$A_t = R^\lambda_t-v_t$的符号，而忽略其幅值。
+这一性质减少了对回报或优势进行归一化的需求，并确保即使不同任务的回报尺度不同，模型也能同等关注所有任务。
+PMPO 分别在具有正优势和负优势的状态上平均简单最大似然损失，从而平衡对正负反馈的关注。
+我们将所有想象状态$s_i$沿批量和时间维度划分到正集合$\mathcal{D}^+=\{s_i \mid A_t \geq 0\}$或负集合$\mathcal{D}^-=\{s_i \mid A_t < 0\}$，并应用以下策略损失：
+
+\eq{
+\mathcal{L}(\theta) &=
+\frac{1-\alpha}{|\mathcal{D}^-|} \sum_{i \in \mathcal{D}^-} \ln \p<\pi_\theta>(a_i|s_i)
+-\frac{\alpha}{|\mathcal{D}^+|} \sum_{i \in \mathcal{D}^+} \ln \p<\pi_\theta>(a_i|s_i)
++\frac{\beta}{N} \sum_{i=1}^N \operatorname{KL}[\p<\pi_\theta>(a_i|s_i)\,\|\,\pi_\mathrm{prior}] \\
+\label{eq:pol}
+}
+
+我们设置$\alpha=0.5$以平衡正负两个集合，并对行为先验使用较弱的尺度$\beta=0.3$。
+不同于原始 PMPO 目标，我们对先验 KL 使用反向方向，以更好地将策略限制在合理行为空间内。
+我们发现三个目标项之间的尺度在实践中非常鲁棒，因为它们都以 nats 计量\citep{shannon1948infotheory}。
+
+\subsection{高效 Transformer}
+
+要把世界模型扩展到多样的数据分布，同时保持快速推理，需要高效且高容量的架构。
+本节介绍我们的高效 Transformer 架构，它同时用于分词器和动力学模型。
+该架构是具有时间和空间维度的二维 Transformer\citep{vaswani2017transformer}。
+为支持交互式生成，注意力在时间维度上采用因果掩码，使同一时间步内的所有 token 可以彼此关注，并关注过去。
+我们从一个标准 Transformer 出发，使用 pre-layer RMSNorm\citep{rmsnorm}、RoPE\citep{rope} 和 SwiGLU\citep{swiglu}。
+为提高训练稳定性，我们采用 QKNorm\citep{dehghani2023scaling} 和 attention logit soft capping\citep{bello2016neural,gemma2}。
+
+\paragraph{效率}
+
+块因果 Transformer 架构的推理速度既受 MLP FLOPs 限制，也受访问长上下文 KV 缓存所需内存带宽限制。
+我们利用一系列改进来加快推理，其中一些也能加快训练。
+首先，我们使用独立的空间注意层和时间注意层，拆分对所有视频 token 进行 dense attention 的成本\citep{axial}。
+第二，与近期发现一致\citep{llama4}，我们发现只需要相对少量的时间层，因此每 4 层才使用一次时间注意力。
+第三，我们在动力学模型的所有注意层中使用 GQA\citep{gqa}，让多个 query head 共享相同 key-value head，从而进一步减小 KV 缓存。
+
+\paragraph{序列长度}
+
+增加空间 token 数会直接提升视觉质量，而增加时间 token 数可以训练更长上下文，从而获得时间上更一致的生成。
+为支持高效训练，我们交替使用大量短批次和少量长批次，并在随后只用长批次微调模型。
+相比只在短批次上训练，交替批次长度产生的中间训练指标和生成结果更能反映最终模型表现。
+批次长度需要长于模型上下文长度，以防止 Transformer 过拟合于总是在上下文开头看到起始帧，从而实现对任意生成长度的泛化。
+
+\pagebreak
+\section{实验}
+
+\input{figures/rl/figure}
+
+我们通过一系列实验评估和分析\method。
+我们的实验大多集中在 Minecraft 上。这是一款复杂电子游戏，包含无限开放世界、怪物以及数百种可开采或合成的物品，观测为原始像素，动作为底层鼠标和键盘输入。
+我们主要使用 VPT 数据集\citep{vpt}，其中包含 2541 小时由人工标注者游玩的 360p 视频，以及 20 FPS 的鼠标和键盘动作。
+这些实验旨在回答以下问题:
+
+\begin{itemize}
+\item \method 是否能在没有在线环境交互的情况下，纯粹通过世界模型内的想象训练学会解决具有挑战性的控制任务? (\Cref{sec:control})
+\item 与此前世界模型相比，\method 能在多大程度上准确预测 Minecraft 中的物体交互和游戏机制? (\Cref{sec:interact})
+\item \method 学习动作条件需要多少动作数据，学到的动作对齐能泛化到何种程度? (\Cref{sec:actgen})
+\item 目标函数和架构中的各个组件分别对 \method 的性能贡献多大? (\Cref{sec:modeldesign})
+\end{itemize}
+
+我们在 256 到 1024 个 TPU-v5p 上训练 2B 参数模型，其中 400M 参数用于分词器，1.6B 参数用于动力学模型；每个设备的批量大小为 1，并使用 FSDP sharding\citep{fsdp,deepspeed}。
+为了改善无上下文生成，我们将 30\% 的批次视频视为独立图像，从而有效训练动力学模型生成起始帧。
+对于 Minecraft，我们使用 256 个空间 token，192 帧上下文长度和 256 的批次长度。
+对于真实世界数据集，我们使用 512 个空间 token，96 帧上下文长度和 128 的批次长度。
+
+\subsection{离线钻石挑战}
+\label{sec:control}
+
+\input{figures/rlabl/figure}
+
+我们在 Minecraft 钻石挑战上评估\method。该长时程控制任务要求智能体在复杂的程序生成 3D 世界中，仅凭原始像素以及鼠标和键盘动作，完成采集材料、制作工具等子任务。
+有 Minecraft 经验的人类玩家平均需要 20 分钟才能收集到一颗钻石，对应约 24,000 步鼠标和键盘动作。
+
+\paragraph{离线设置}
+虽然此前智能体已经通过与环境在线交互在 Minecraft 中获得钻石\citep{vpt,dreamerv3}，但在物理机器人等实际应用中，部署尚未训练好的策略通常不可行，因为安全保障、场景重置和实时奖励提供都很困难。
+相反，我们关注从固定经验数据集中纯离线学习的挑战。
+我们只使用 VPT Contractor 数据集\citep{vpt}，其中包含 2.5K 小时的视频、动作和事件标注；智能体在学习时不允许与环境交互，并与同一离线设置下的基线比较。
+我们遵循 VPT 的评价协议，使用原始像素输入以及底层鼠标和键盘动作，并要求智能体通过游戏内用户界面完成物品合成。
+每个回合持续 60 分钟，从随机生成的 Minecraft 世界中的空物品栏开始。
+
+\paragraph{执行情况}
+\method 学习一个单一 Transformer，用于预测输入、动作、奖励和价值。
+为了构建一个可引导的智能体，我们采用多任务设置，并让动作、奖励和价值以任务嵌入为条件。
+我们用 VPT 数据集中的已有事件标注任务及其稀疏二值奖励。
+\Cref{tab:mc_tasks} 列出 20 个任务，\cref{tab:mc_ladder} 展示了在环境评价时用于引导智能体逐步获得钻石的线性提示序列。
+为了在行为克隆、奖励建模和强化学习中放大数据集信号，我们使用 50\% 均匀序列和 50\% 完成某项任务的相关序列组成的数据混合。
+行为克隆损失只施加在相关序列上，而动力学损失只施加在均匀序列上，以避免生成过于乐观。
+我们使用 one-hot 任务指示符，但也可以很容易改用文本嵌入。
+键盘动作表示为 23 个二值分布，鼠标动作则按照 VPT 的做法用 $\mu$-law 离散化为 121 个类别\citep{vpt}。
+
+\pagebreak
+我们比较以下智能体:
+
+\begin{itemize}
+\item\textbf{VPT（微调）}\quad
+文献中用于鼠标和键盘控制的最强 Minecraft 智能体\citep{vpt}。
+VPT 论文在离线设定中介绍了两个无条件行为克隆策略，二者都在 270K 小时带合成动作标注的 YouTube 游戏视频上训练；其中一个还在“早期游戏”数据的筛选子集上进一步微调。
+我们使用微调策略，因为它明显优于预训练策略。
+
+\item\textbf{BC（无任务）}\quad
+从零开始进行行为克隆，使用多 token 预测（MTP），不使用任务条件。
+虽然 VPT 使用 Contractor 数据训练动作标注器，并在带标注的 YouTube 视频上训练策略，但我们的 BC 智能体直接且仅在 Contractor 动作的相关子集上训练。
+该智能体不使用任务条件，因此可与 VPT 直接比较。
+
+\item\textbf{BC}\quad
+在带任务条件的筛选 Contractor 数据集上从零开始进行行为克隆。
+该智能体在与 BC（无任务）相同的筛选 Contractor 数据集上训练，但额外任务输入使其可控。
+在环境评价时，提示序列会引导智能体通过中间任务，最终开采钻石。
+
+\item\textbf{VLA(Gemma 3)}\quad
+遵循 VLA 配方\citep{kim2024openvla,intelligence2025pi05}，我们通过微调视觉语言模型 Gemma 3 来训练行为克隆策略\citep{team2025gemma3}，训练数据为使用 MTP 的相关序列。
+Gemma 3 使用远多于我们其他模型的计算和数据进行预训练，包括面向视觉感知的原生图像预训练，因此是一个强基线。
+
+\item\textbf{WM+BC}\quad
+\method{} 在进行想象训练之前的行为克隆策略。
+该策略从已经在完整 Contractor 数据集上预训练的世界模型初始化。
+随后通过行为克隆、奖励建模和动力学损失进行智能体微调。
+
+\item\textbf{想象 RL}\quad
+完整的 \method 智能体，通过在想象中进行强化学习微调 WM+BC 智能体得到，我们称之为想象训练。
+尽管策略在世界模型内部进行 on-policy 强化学习，但没有任何真实环境交互，因此仍是一种离线方法。
+\end{itemize}
+
+\input{figures/wmtask/figure}
+
+\paragraph{智能体性能}
+\Cref{fig:rl} 比较智能体在钻石任务上的表现。
+我们报告通向钻石的若干关键物品的成功率，这些物品列于\cref{tab:mc_items}。
+VPT（finetuned）最多推进到木棍，成功率为 53\%。
+它还会通过边缘情形收集少量石头、铁矿石和铁锭，例如 Creeper 爆炸或战利品箱。
+直接使用 Contractor 动作而不是标注 YouTube 视频后，我们的现代 BC 基线性能高于 VPT（finetuned）。
+VLA（Gemma 3）表明，从预训练模型初始化策略有显著收益，可推进到铁镐，成功率为 11\%。
+\method 在石镐之前各里程碑的成功率超过 90\%，铁镐成功率为 29\%，并在 0.7\% 的评估回合中获得钻石。
+里程碑越难，想象训练相对行为克隆智能体带来的提升越明显。
+\Cref{fig:rlabl} 比较钻石任务上的其他智能体，表明世界模型表示在行为克隆中优于 Gemma 3 的通用表示。
+这表明视频预测隐含地学习了对世界的理解，这对决策也有帮助。
+最后，想象训练不仅持续提高成功率，也使策略更高效，从而更快到达里程碑。
+
+\subsection{人类交互}
+\label{sec:interact}
+
+为了评估其预测复杂交互的能力，我们在 Minecraft VPT 数据集\citep{vpt} 上训练 \method，并将生成结果与此前在该数据集上训练的世界模型进行比较。
+在这一评测中，人类玩家直接在世界模型中操作并尝试完成任务，示例如\cref{fig:wmtask} 所示。
+人类玩家接收任务描述，世界模型被初始化为该任务的起始帧。
+我们选择了一组多样任务，覆盖广泛的物体交互和游戏机制。
+任务包括挖坑、建墙、砍树、放置并驾驶船只、从物体上移开视角再转回、与工作台和熔炉交互等。
+我们将 \method 与世界模型 Oasis\citep{oasis}、Lucid-v1\citep{lucidv1} 和 MineWorld\citep{mineworld} 进行比较。
+需要说明的是，Genie 3 \citep{genie3} 只支持相机动作和一个通用的"交互"按钮，而 Minecraft 需要更一般的鼠标和键盘动作空间，因此二者不能直接比较。
+\Cref{tab:inference} 归纳比较模型。
+全部结果见\cref{fig:wmtasks_ours,fig:wmtasks_oasis,fig:wmtasks_lucid}。
+
+\input{tables/inference}
+
+\pagebreak
+\paragraph{推理速度}
+
+我们在单张 H100 GPU 上测量每个模型的推理速度。
+\method 和 Lucid-v1 的速度超过 Minecraft 物理引擎\footnote{\url{https://minecraft.fandom.com/wiki/Tick}} 和 VPT 数据集\citep{vpt}的 20 FPS，因此能够实现实时交互式推理。
+\method 的上下文长度为 9.6 秒，显著长于此前模型的 0.8 到 1.6 秒。
+Oasis 有两个规模：一个开放权重的 500M 参数版本，以及一个参数量未知、可在项目网站上交互的大模型。
+小模型在单张 H100 上达到 20 FPS。
+大模型在线交互由多张 H100 托管；根据公开信息，我们估计它在单张 H100 上约为 5 FPS。
+MineWorld 使用并行解码可达到 2 FPS，不使用并行解码时更慢。
+此外，并行解码需要预先知道动作，所提供的用户界面也要求这一点。
+因此，它不支持实时交互；由于我们的任务需要数百个动作，我们无法在这些任务上评价 MineWorld。
+
+\input{figures/robotics/figure}
+
+\enlargethispage{2\baselineskip}
+\paragraph{复杂交互}
+
+人类玩家在世界模型内尝试所有任务的生成视频见\cref{fig:wmtasks_ours,fig:wmtasks_oasis,fig:wmtasks_lucid}。
+Lucid-v1 无法完成这些任务，生成会发散，或忽略物体交互。
+大型 Oasis 模型可以完成 16 个任务中的 5 个，例如放置火把、用玻璃板填窗户以及打开门。
+然而，它无法完成建造任务，因为在放置几个方块后，模型很快会把大型结构幻觉进世界中。
+这种“自动补全”式失败反映出它对游戏机制理解不足。
+我们没有评价 MineWorld，因为它缺乏交互式推理。
+\method 完成了 16 个任务中的 14 个，能够准确生成复杂交互和游戏机制，例如切换物品、放置和破坏方块、与怪物战斗、放置并乘船、进入传送门等。
+其时间一致性受 9.6 秒上下文限制，但仍显著长于此前模型。
+虽然它能正确生成物品栏、合成台和熔炉界面，并预测大多数鼠标移动，但物品栏中的物品有时不够清晰，或会随时间变化，仍有改进空间。
+
+作为检验适用性的一步，我们还用机器人数据集训练了 \method 世界模型\citep{soar}。
+在\cref{fig:robotics}中，我们观察到模型能对真实世界物体生成准确的物理交互和反事实交互，缓解了现有视频模型中的因果混淆。
+其他细节见补充材料。
+
+\subsection{动作泛化}
+\label{sec:actgen}
+
+世界模型的一个潜力在于，它可以利用多样的无标签视频教会智能体理解世界。
+例如，世界模型可以从没有动作标注的网络视频中学习一般物理规律和物体交互。
+本节研究要将一个具身动作空间 grounding 到 \method 世界模型中，需要多少带动作的配对视频。
+直观上，当动作缺失时，世界模型必须学习更宽泛的可能结果分布；当动作给定时，它可以将分布收窄。
+此外，我们还研究动作条件泛化得有多好，不仅考察同分布泛化，也考察对特意留出的世界区域的分布外泛化。
+为衡量动作条件的准确性，我们将动作条件多步生成与留出集中的真实视频比较。
+在给定 320 帧上下文时，我们报告 16 步生成的 PSNR 和 SSIM。
+
+\input{figures/actgen/figure}
+
+\paragraph{动作数据量}
+为了理解学习动作条件需要多少带动作视频，我们在 VPT 数据集的全部 2541 小时视频上训练 \method，但只为其中一个小子集提供动作。
+当动作不可用时，动力学模型以一个学习得到的嵌入为条件，如\cref{sec:dynamics}所述。
+我们分别训练带有 0、10、100、1000 和 2541 小时动作的 \method 模型。
+可用动作取自数据集顺序中的最早部分，因此相比随机打乱，会对应更少的独立世界和玩家。
+\Cref{fig:actgen} 展示动作条件质量，并将其与完全不使用动作和使用全部动作训练的模型进行比较。
+仅使用 10 小时动作时，\method 相对使用全部动作训练的模型达到 53\% PSNR 和 75\% SSIM。
+使用 100 小时动作时，性能进一步提升到 85\% PSNR 和 100\% SSIM。
+这一结果表明，世界模型的大部分知识来自无标签视频，只需要少量动作即可完成动作条件学习。
+
+\paragraph{动作外推}
+
+原则上，世界模型不仅可以从少量动作中学习动作 grounding，还可以将动作条件泛化到全新场景。
+未来，这可能使世界模型能够从多样网络视频中吸收通用知识，并在多种环境中模拟智能体。
+据我们所知，我们首次对这一假设进行了受控评价。
+为此，我们仔细地将 VPT 数据集划分为两部分：一部分只包含 Overworld 视频，另一部分只包含另外两个游戏维度 Nether 和 End 的视频。
+Overworld 包含森林、沙漠、海洋等场景，而 Nether 和 End 具有明显不同且独特的视觉外观。
+Nether 是充满熔岩和红色方块的地下世界，End 则充满 Overworld 中看不到的黄色方块和黑色高塔。
+我们在两个数据集的视频上训练 \method，但只为 Overworld 提供动作。
+随后，我们在 Nether 和 End 上对得到的模型进行动作条件评价，而模型从未见过这些维度中的动作。
+在此前实验中，我们观察到，如果只在 Overworld 部分训练而不包含 Nether 视频，Nether 起始帧的生成分数会很差。
+\Cref{fig:actgen} 报告了相对于完全不使用动作和使用全部动作训练的相对性能。
+结果显示，世界模型达到使用全部动作训练模型的 76\% PSNR 和 80\% SSIM。
+这表明，世界模型的动作条件可以泛化到仅从无标签视频中见过的场景。
+
+\subsection{模型设计}
+\label{sec:modeldesign}
+
+\input{tables/ablations}
+
+世界模型需要足够高的容量来预测复杂物体交互，也需要快速推理来支持想象训练和人类交互式检查。
+此外，与典型视频模型相比，交互式推理会带来不同的设计取舍：模型必须快速生成单帧，并防止误差累积。
+本节通过一系列目标函数和架构决策，将 \method 从一个朴素 diffusion forcing Transformer 基线逐步改进。
+为评价每个模型，我们训练 48 小时，然后生成 1024 个 384 帧视频（约 20 秒），这些视频不使用任何上下文，交互动作由固定行为克隆策略选择。
+随后，我们将视频切成 16 帧片段，并在这些片段上计算 Fréchet Video Distance（FVD）\citep{fvd}。
+
+\pagebreak
+\input{figures/nfe/figure}%
+\Cref{tab:ablations} 展示了模型改进过程及其生成质量和速度。
+我们从一个标准块因果 Transformer 开始，该模型使用 dense attention，并采用速度参数化的 diffusion forcing。
+我们的目标是在单张 H100 GPU 上达到 20 FPS 交互式推理，以匹配 Minecraft tick rate 和 VPT 数据集帧率。
+当每帧使用 64 个采样步骤时，基线低于实时速度，在单张 H100 上只有 0.8 FPS；减少到 4 个采样步骤可达到 9.1 FPS，但质量明显下降。
+Shortcut 模型\citep{shortcut} 在只使用 4 个采样步骤时几乎恢复了原始视觉质量。
+随后，我们将模型改为 x-space 预测，在 x-space 中计算损失，并应用 ramp 权重。
+这些改动显著提升生成质量，尤其在长序列生成中超过传统 v-space 预测。
+我们推测，x-space 预测目标结构更合适，因此能降低长期累积高频误差的风险。
+\Cref{fig:nfe} 比较了使用 x-space 损失和 ramp 权重的 shortcut diffusion forcing 在更大采样步数范围内的视觉质量。
+
+交替批次长度训练类似渐进式训练，可加快学习，同时允许在训练期间检查长视频生成。
+每四层使用一次时间注意力不仅加快训练和推理\citep{llama4}，还提升生成质量，可能是因为空间注意力的归纳偏置让计算更集中在当前帧。
+GQA 在不降低性能的情况下进一步加速生成。
+将长上下文层从 dense attention 改为仅时间注意力，以较小质量代价加快推理，也为随后增加 token 数量做好准备。
+虽然 register token 没有带来明显量化提升，但从质量上看，它们改善了时间一致性。
+经过这些改动后，训练和推理足够快，可以通过增加空间 token 提高模型容量，从而改进对复杂交互的预测。
+完整模型达到 FVD 57，而朴素 diffusion forcing Transformer 基线为 306，使用 v-space 预测和损失的完整架构为 124。
+
+\input{tables/setups}
+
+\pagebreak
+\section{相关工作}
+
+\paragraph{Minecraft 智能体}
+
+在电子游戏 Minecraft 中获取钻石一直是智能体研究的重点\citep{johnson2016malmo,guss2019minerl,kanervisto2022minerlcomp,kanitscheider2021minecraftcurriculum}，因为这需要在复杂的程序生成 3D 世界中，通过数千个底层动作收集资源并制作工具。
+文献中采用了不同设置，\cref{tab:setups} 汇总了与我们工作相关的部分。
+VPT\citep{vpt} 收集了 2.5K 小时的人工标注者 gameplay，并用它为 270K 小时网络视频合成鼠标和键盘动作标注。
+VPT 在这一大型离线数据集上进行行为克隆，并针对“早期游戏”数据进行微调；
+随后使用 194K 小时在线强化学习，得到能够获取钻石和制作钻石镐的策略。
+Dreamer 3 \citep{dreamerv3} 在不使用任何人类数据的情况下，通过 1.4K 小时在线交互从零开始学会收集钻石。
+它使用 MineRL 竞赛动作空间，其中包含抽象合成动作。
+其他工作在更简单的任务上探索了新的算法\citep{lifshitz2023steve1,cai2023minecraftgroot,zhou2024minedreamer,nieto2021minecraftskills}。
+本文中，我们训练的智能体完全从 2.5K 小时 Contractor 数据中学习获取钻石，不使用任何在线交互。
+我们使用底层鼠标和键盘动作以及高分辨率图像输入。
+
+\paragraph{世界模型智能体}
+
+长期探索了基于学习环境模型的学习行为\citep{sutton1991dyna,deisenroth2011pilco,watter2015e2c}。
+Visual Foresight\citep{finn2017visualforesight}、\citet{ha2018worldmodels} 的工作以及 PlaNet\citep{hafner2018planet} 已经展示出足够准确、可用于像素规划的世界模型。
+随着 Dreamer 系列的发展，世界模型已经成为解决高维输入控制问题的高性能方法，在鲁棒性、效率和最终性能上超过无模型强化学习\citep{hafner2019dreamer,hafner2020dreamerv2,dreamerv3}。
+基于 Transformer 或扩散目标的世界模型也在离散控制上展现出较高数据效率\citep{micheli2022iris,robine2023twm,storm}。
+然而，这些世界模型受限于模型容量，因此主要适用于相对简单的模拟环境。
+
+\paragraph{可扩展的世界模型}
+
+已有研究表明，更大的世界模型可以模拟更复杂的数据分布\citep{yu2025survey}。
+Genie 3 等世界模型可以生成高度多样的场景，并模拟相机运动和简单交互\citep{genie3,he2025matrix,sun2025virtual,team2025yan}。
+PlayerOne\citep{tu2025playerone} 和 Genie\citep{bai2025whole} 进一步条件化于人类运动。
+Oasis\citep{oasis}、Lucid\citep{lucidv1} 和 MineWorld\cite{mineworld} 从鼠标和键盘输入中学习 Minecraft 模拟器。
+Oasis 捕捉了简单游戏机制，并在专用硬件上实现实时推理；但 Lucid 的预测很快发散，MineWorld 则慢于实时。
+GameNGen\citep{valevski2024diffusion} 将 Stable Diffusion 微调为某个游戏关卡的可玩模拟器。
+DIAMOND\citep{alonso2024diffusion} 学习 CS:GO 某个关卡的模拟器，实现短期预测。
+GAIA\citep{hu2023gaia,russell2025gaia} 生成真实世界数据驱动的场景。
+然而，这些世界模型对复杂物体交互的预测仍不够精确，尚难支撑想象训练。
+
+\paragraph{快速生成}
+
+快速且准确的生成长期以来都是生成模型的挑战。
+MaskGit 同步生成离散 token，以加速自回归模型采样\citep{chang2022maskgit}。
+扩散模型常通过蒸馏减少采样所需前向传播次数\citep{salimans2022progressive,kodaira2025streamdit}，但这需要两个训练阶段。
+Consistency models 学习可快速生成图像的轨迹，但需要谨慎设计时间表\citep{song2023consistency,song2023improved,lu2024simplifying}，并已成功应用于视频生成\citep{wang2023videolcm}。
+Shortcut 模型\citep{shortcut} 以噪声水平和步数为条件建模流，在一个训练阶段内得到无需调度表的快速生成模型。
+Mean Flow\citep{geng2025meanflow} 将步长条件化的思想扩展到连续时间公式。
+由于视频 token 数量很大，视频生成中常采用高效和稀疏架构\citep{axial,zhao2024real,zhang2025vsa}。
+这些模型不支持交互式推理，其中许多技术与我们的工作是互补的。
+
+\section{讨论}
+
+我们提出了 \method{}，一种可扩展智能体，它通过在快速且准确的世界模型内进行想象训练，学会解决具有挑战性的控制任务。
+\method 是首个完全依靠离线数据、无需在线交互即可在 Minecraft 中获得钻石的智能体。
+这一结果表明，它能够在复杂环境中学习成功的长时程策略。
+纯离线数据学习有望用于在线交互不现实或不安全的应用场景。
+
+作为世界模型，\method 依赖 shortcut forcing 目标和高效 Transformer 架构来预测复杂物体交互，同时支持单 GPU 实时交互式推理。
+我们证明，它显著超过此前 Minecraft 世界模型，能够准确预测由鼠标和键盘输入触发的广泛游戏机制。
+不过，该世界模型远不是游戏的完整克隆，尤其仍受限于短上下文记忆和不够准确的物品栏预测；这也使 Minecraft 成为未来世界模型和智能体研究的理想基准。
+我们还表明，\method 只需少量带动作的视频就能学习准确的动作条件，从而能够吸收大量无标签视频中的知识。
+
+未来有希望的方向包括：在通用互联网视频上预训练，将长期记忆纳入世界模型和智能体，引入语言理解，利用少量在线纠正数据，以及自动发现目标以分解长时程任务。
+\method 提供了这些探索的可靠和性能良好的起点。
+
+\clearpage
+\begin{hyphenrules}{nohyphenation}
+\setlength{\bibsep}{.5ex plus .5ex}
+\bibliography{references}
+\end{hyphenrules}
+
+\clearpage
+\appendix
+\input{appendix}
+
+\end{document}

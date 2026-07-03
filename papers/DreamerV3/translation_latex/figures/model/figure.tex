@@ -1,0 +1,14 @@
+\begin{figure}[t!]
+\centering
+\vspace*{-1ex}
+\begin{subfigure}{.5\textwidth}
+\includegraphics[width=\linewidth]{model/model_wm}
+\caption{世界模型学习}
+\end{subfigure}\hfill%
+\begin{subfigure}{.43\textwidth}
+\includegraphics[width=\linewidth]{model/model_ac}
+\caption{Actor-Critic 学习}
+\end{subfigure}
+\caption{Dreamer 的训练流程。世界模型将感官输入编码为离散表示 $z_t$；给定已执行动作 $a_t$ 后，带循环状态 $h_t$ 的序列模型预测这些表示。模型通过重建输入来塑造表征。Actor 和 critic 分别预测动作 $a_t$ 与价值 $v_t$，并从世界模型预测出的抽象表示轨迹中学习。}
+\label{fig:model}
+\end{figure}

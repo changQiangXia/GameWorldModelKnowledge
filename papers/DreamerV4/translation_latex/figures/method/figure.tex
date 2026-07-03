@@ -1,0 +1,17 @@
+\begin{figure}[t!]
+\vspace*{-2\baselineskip}
+\centering
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[height=2.4in]{figures/method/tok}
+\caption{因果分词器}
+\end{subfigure}%
+\hfill%
+\begin{subfigure}[t]{0.45\textwidth}
+\centering
+\includegraphics[height=2.5in]{figures/method/dyn}
+\caption{交互式动力学}
+\end{subfigure}
+\caption{世界模型设计。\method 由因果分词器和交互式动力学模型组成，二者使用相同的块因果 Transformer 架构。分词器编码部分遮蔽的图像 patch 和 latent token，通过带 \texttt{tanh} 激活的低维投影压缩 latent，并解码 patch。它使用因果注意力实现时间压缩，同时仍支持逐帧解码。动力学模型在动作、shortcut 噪声水平、步长以及分词器表示的交错序列上运行，并通过 shortcut forcing 目标对表示进行去噪。预训练之后，世界模型通过在动力学 Transformer 中插入任务 token，并由这些 token 预测动作、奖励和价值，被微调为智能体。}
+\label{fig:model}
+\end{figure}

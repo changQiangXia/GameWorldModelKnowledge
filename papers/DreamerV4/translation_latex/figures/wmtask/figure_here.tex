@@ -1,0 +1,9 @@
+\begin{figure}[h!]
+\newcommand{\inlineCheck}{\,\smash{\raisebox{-.3ex}{\includegraphics[height=2ex]{figures/wmtask/check.png}}}\,}
+\newcommand{\inlineCross}{\,\smash{\raisebox{-.3ex}{\includegraphics[height=2ex]{figures/wmtask/cross.png}}}\,}
+\vspace*{-1\baselineskip}
+\centering
+\includegraphics[width=\linewidth]{figures/wmtask/wmtask}
+\caption{人类交互。人类玩家使用鼠标和键盘与世界模型进行实时反事实交互，从同一初始图像出发执行同一任务。\method 是首个能够准确预测将方块放置成指定形状所需物体交互和游戏机制的世界模型。相比之下，以前的 Minecraft 世界模型会出现视觉退化、手持物品变化，并生成玩家从未建造过的结构。\method 的世界模型能让玩家完成该任务（\inlineCheck{}），而 Oasis\citep{oasis} 和 Lucid-v1\citep{lucidv1} 无法完成（\inlineCross{}）。}
+\label{fig:wmtask}
+\end{figure}

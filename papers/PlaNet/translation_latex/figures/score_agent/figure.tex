@@ -1,0 +1,46 @@
+\begin{figure*}[t]
+\providecommand{\width}{}
+\renewcommand{\width}{0.28\textwidth}
+\providecommand{\path}{}
+\renewcommand{\path}{score_agent}
+\captionsetup[subfigure]{position=above,labelformat=empty,margin={1em,0em},skip=-.1em}
+\centering\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cartpole Swing Up}
+\includegraphics[width=\textwidth]{\path/cartpole_swingup}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Reacher Easy}
+\includegraphics[width=\textwidth]{\path/reacher_easy}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cheetah Run}
+\includegraphics[width=\textwidth]{\path/cheetah_run}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{.7em}\hfil\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Finger Spin}
+\includegraphics[width=\textwidth]{\path/finger_spin}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Cup Catch}
+\includegraphics[width=\textwidth]{\path/cup_catch}
+\end{subfigure}\hfil%
+\begin{subfigure}[t]{\width}
+\centering
+\caption{Walker Walk}
+\includegraphics[width=\textwidth]{\path/walker_walk}
+\end{subfigure}\hfil\hfil\hfil \\
+\vspace{1em}\hspace{1em}
+\begin{subfigure}[t]{.7\textwidth}
+\centering
+\includegraphics[width=\textwidth]{\path/legend}
+\end{subfigure}\hfil%
+\caption{不同智能体设计的比较。图中展示测试性能随已收集回合数的变化。我们比较 \method、一个使用随机动作收集数据的版本（random collection），以及一个在每个环境步从 $1000$ 条动作序列中选择最优序列、但不通过 CEM 迭代细化规划的版本（random shooting）。曲线表示中位数，阴影区域表示在 5 个随机种子和 10 条轨迹上得到的第 5 到第 95 百分位范围。}
+\label{fig:score_agent}
+\end{figure*}

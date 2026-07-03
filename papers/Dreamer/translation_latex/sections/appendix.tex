@@ -1,0 +1,140 @@
+\section{超参数}
+\label{sec:hparams}
+
+\paragraph{模型组件}
+
+我们使用 \citet{ha2018worldmodels} 的卷积编码器和解码器网络，使用 \citet{hafner2018planet} 的 RSSM，并将其他函数实现为 3 层全连接网络，每层大小为 $300$，激活函数为 ELU~\citep{clevert2015elu}。潜在空间中的分布为 30 维对角高斯分布。动作模型输出经过 tanh 的均值，并将其放大 5 倍，同时输出用于 Normal 分布的 softplus 标准差；随后该 Normal 分布再经过 tanh 变换\citep{haarnoja2018sac}。这一缩放因子使智能体能够让动作分布达到饱和。
+
+\paragraph{学习更新}
+
+我们抽取批量大小为 50、序列长度为 50 的数据批次，使用 Adam~\citep{kingma2014adam} 训练世界模型、价值模型和动作模型；三者学习率分别为 $6\times10^{-4}$、$8\times10^{-5}$ 和 $8\times10^{-5}$，并将超过 $100$ 的梯度范数缩小。我们不缩放 KL 正则项（$\beta=1$），但像 PlaNet 一样将其下限裁剪为 $3$ 个 free nats。想象时域为 $H=15$，同一批想象轨迹同时用于更新动作模型和价值模型。$\mathrm{V}_\lambda$ 目标使用 $\gamma=0.99$ 和 $\lambda=0.95$ 计算。实验中，我们没有发现模型学习需要 latent overshooting，动作模型需要熵奖励，或价值模型需要目标网络。
+
+\paragraph{环境交互}
+
+数据集初始化为 $S=5$ 个使用随机动作收集的 episode。之后，我们交替执行 $100$ 个训练步和 $1$ 个数据收集 episode；收集数据时执行动作模型预测的众数动作，并加入 $\Normal(0,0.3)$ 探索噪声。不同于 \citet{hafner2018planet} 和 \citet{lee2019slac} 为每个环境手动选择动作重复次数，我们在所有环境中固定为 2。\Cref{fig:repeat} 给出了不同动作重复值下的鲁棒性评估。
+
+\paragraph{离散控制}
+
+在 Atari 游戏和 DeepMind Lab 关卡实验中，动作模型预测 categorical 分布的 logits。在潜在想象中，我们对采样步骤使用直通梯度。动作噪声采用 epsilon-greedy，其中 $\epsilon$ 在前 $200,000$ 个梯度步内从 $0.4$ 线性退火到 $0.1$。考虑到这些任务更复杂，我们使用 $H=10$ 的想象时域，将 KL 正则项缩放为 $\beta=0.1$，并用 tanh 对奖励进行有界化。我们还使用二分类器从潜在状态预测折扣因子，该分类器用 $0$ 和 $\gamma$ 的软标签训练。
+
+\clearpage
+\section{推导}
+\label{sec:derivations}
+
+我们为潜在动力学模型定义信息瓶颈目标\citep{tishby2000ib}：
+\begin{equation}
+\max
+\MI{s_{1:T}; (o_{1:T},r_{1:T}) \mid a_{1:T}}
+-\beta\,\MI{s_{1:T},i_{1:T} \mid a_{1:T}},
+\end{equation}
+其中 $\beta$ 是标量，$i_t$ 是数据集索引，用于确定观测 $\p(o_t|i_t)\defined\delta(o_t-\bar{o}_t)$，与 \citet{alemi2016vib} 中的设定一致。
+
+最大化该目标会促使模型状态预测观测和奖励序列，同时限制每个时间步可提取的信息量。这样，模型在重建每张图像时会尽可能依赖先前时间步提取到的信息，只在必要时从当前图像中读取额外信息。因此，信息正则项鼓励模型学习长期依赖关系。
+
+对于生成式目标，我们利用 KL 散度的非负性为第一项构造下界，并去掉边缘数据概率，因为它不依赖于表征模型：
+\begin{equation}
+\begin{aligned}
+&\MI{s_{1:T};(o_{1:T},r_{1:T}) \mid a_{1:T}} \\
+=\enskip&\E[\Big]{\p(o_{1:T},r_{1:T},s_{1:T},a_{1:T})}{\sum_t
+ \ln\p(o_{1:T},r_{1:T}|s_{1:T},a_{1:T})
+ -\describe{\ln\p(o_{1:T},r_{1:T}|a_{1:T})}{const}} \\
+\stackrel{+}{=}\enskip&\E[\Big]{}{\sum_t
+ \ln\p(o_{1:T},r_{1:T}|s_{1:T},a_{1:T})} \\
+\geq\enskip&\E[\Big]{}{\sum_t
+ \ln\p(o_{1:T},r_{1:T}|s_{1:T},a_{1:T})}
+ -\KL[\Big]{\p(o_{1:T},r_{1:T}|s_{1:T},a_{1:T})}{\prod_t\q(o_t|s_t)\q(r_t|s_t)} \\
+=\enskip&\E[\Big]{}{\sum_t
+ \ln\q(o_t|s_t)+\ln\q(r_t|s_t)}.
+\end{aligned}
+\end{equation}%
+对于对比目标，我们减去变分编码器下的数据常数边缘概率，应用 Bayes 规则，并使用 InfoNCE 小批量下界\citep{poole2019bounds}：
+\begin{equation}
+\begin{aligned}
+&\E{}{\ln\q(o_t|s_t)+\ln\q(r_t|s_t)} \\
+\upto\enskip&\E{}{\ln\q(o_t|s_t)-\ln\q(o_t)+\ln\q(r_t|s_t)} \\
+=\enskip&\E{}{\ln\q(s_t|o_t)-\ln\q(s_t)+\ln\q(r_t|s_t)} \\
+\geq\enskip&\E[\bigg]{}{\ln\q(s_t|o_t)-\ln\sum_{o'}\q(s_t|o')+\ln\q(r_t|s_t)}.
+\end{aligned}
+\end{equation}%
+对于第二项，我们同样利用 KL 散度的非负性得到一个上界：
+\begin{equation}
+\begin{aligned}
+&\MI{s_{1:T};i_{1:T} \mid a_{1:T}} \\
+=\enskip&\E[\Big]{\p(o_{1:T},r_{1:T},s_{1:T},a_{1:T},i_{1:T})}{\sum_t
+ \ln\p(s_t|s_{t-1},a_{t-1},i_t)
+ -\ln\p(s_t|s_{t-1},a_{t-1})} \\
+=\enskip&\E[\Big]{}{\sum_t
+ \ln\p(s_t|s_{t-1},a_{t-1},o_t)
+ -\ln\p(s_t|s_{t-1},a_{t-1})} \\
+\leq\enskip&\E[\Big]{}{\sum_t
+ \ln\p(s_t|s_{t-1},a_{t-1},o_t)
+ -\ln\q(s_t|s_{t-1},a_{t-1})} \\
+=\enskip&\E[\Big]{}{\sum_t
+ \KL{\p(s_t|s_{t-1},a_{t-1},o_t)}{\q(s_t|s_{t-1},a_{t-1})}}.
+\end{aligned}
+\end{equation}%
+由此得到原目标的下界。
+
+\pagebreak
+\section{离散控制}
+\label{sec:discrete}
+
+我们在 Atari 套件\citep{bellemare2013ale} 和 DeepMind Lab~\citep{beattie2016dmlab} 中选取一部分离散动作任务来评估 Dreamer。尽管完全通过世界模型学习的智能体在这些领域尚未具备竞争力\citep{kaiser2019simple}，这些任务仍提供了具有视觉复杂性、稀疏奖励和提前终止特性的多样化测试平台。智能体观测 $64\times64\times3$ 图像，并从 $3$ 到 $18$ 个动作中选择其一。对于 Atari，我们遵循 \citet{machado2018stickyactions} 的 sticky actions 评估协议。相关实验见 \cref{fig:discrete}。
+
+\input{figures/discrete/figure}
+
+\clearpage
+\section{行为学习}
+\label{sec:value-all}
+\input{figures/value/figure}
+
+\clearpage
+\section{表征学习}
+\label{sec:repr-all}
+\input{figures/repr/figure}
+
+\clearpage
+\section{动作重复}
+\input{figures/repeat/figure}
+
+\clearpage
+\section{连续控制分数}
+
+\begin{tabularx}{\textwidth}{
+@{}
+X
+>{\raggedleft\arraybackslash}p{4em}
+>{\raggedleft\arraybackslash}p{4em}
+>{\raggedleft\arraybackslash}p{4em}
+>{\raggedleft\arraybackslash}p{4em}
+@{}}
+\toprule
+& A3C & D4PG & PlaNet\footnote{我们使用固定动作重复 $R=2$ 重新运行 PlaNet，因此得分与 \citet{hafner2018planet} 报告的数值不同。} & Dreamer \\
+\midrule
+输入模态&本体感知&像素&像素&像素\\
+环境步数& $10^8$ & $10^8$ & $5\times10^6$ & $5\times10^6$ \\
+\midrule
+Acrobot Swingup& 41.90 & 91.70 & 3.21 & \textbf{365.26} \\
+Cartpole Balance& 951.60 & \textbf{992.80} & 452.56 & \textbf{979.56} \\
+Cartpole Balance Sparse& 857.40 & \textbf{1000.00} & 164.74 & \textbf{941.84} \\
+Cartpole Swingup& 558.40 & \textbf{862.00} & 312.56 & \textbf{833.66} \\
+Cartpole Swingup Sparse& 179.80 & 482.00 & 0.64 & \textbf{812.22} \\
+Cheetah Run& 213.90 & 523.80 & 496.12 & \textbf{894.56} \\
+Cup Catch& 104.70 & \textbf{980.50} & 455.98 & \textbf{962.48} \\
+Finger Spin& 129.40 & \textbf{985.70} & 495.25 & 498.88 \\
+Finger Turn Easy& 167.30 & \textbf{971.40} & 451.22 & 825.86 \\
+Finger Turn Hard& 88.70 & \textbf{966.00} & 312.55 & 891.38 \\
+Hopper Hop& 0.50 & 242.00 & 0.37 & \textbf{368.97} \\
+Hopper Stand& 27.90 & \textbf{929.90} & 5.96 & \textbf{923.72} \\
+Pendulum Swingup& 48.60 & 680.90 & 3.27 & \textbf{833.00} \\
+Quadruped Run& $-$ & $-$ & 280.45 & \textbf{888.39} \\
+Quadruped Walk& $-$ & $-$ & 238.90 & \textbf{931.61} \\
+Reacher Easy& 95.60 & \textbf{967.40} & 468.50 & \textbf{935.08} \\
+Reacher Hard& 39.70 & \textbf{957.10} & 187.02 & 817.05 \\
+Walker Run& 191.80 & 567.20 & 626.25 & \textbf{824.67} \\
+Walker Stand& 378.40 & \textbf{985.20} & 759.19 & \textbf{977.99} \\
+Walker Walk& 311.00 & \textbf{968.30} & \textbf{944.70} & \textbf{961.67} \\
+\midrule
+平均数& 243.70 & 786.32 & 332.97 & \textbf{823.39} \\
+\bottomrule
+\end{tabularx}

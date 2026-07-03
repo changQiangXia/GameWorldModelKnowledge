@@ -1,0 +1,60 @@
+\input{figures/arxiv_minecraft/figure}
+\input{figures/ablations/figure}
+
+\section*{结果}
+\label{sec:experiments}
+
+我们在固定超参数下，跨 8 个领域、超过 150 个任务评估 Dreamer 的通用性。
+实验旨在将 Dreamer 与文献中表现最强的方法比较；这些方法通常针对相应基准做了专门设计和调参。
+我们还比较了一个高质量 PPO\citep{schulman2017ppo} 实现。PPO 是标准强化学习算法，并以稳健性著称。我们为 PPO 选择固定超参数，使其尽可能在各领域取得较好表现，同时复现 ProcGen 上已有公开 PPO 强结果\citep{cobbe2021ppg}。
+为推动强化学习边界，我们还将 Dreamer 应用于具有挑战性的电子游戏 Minecraft，并与此前强算法比较。
+最后，我们分析 Dreamer 各组件的重要性，以及它对不同模型规模和计算预算的稳健性。
+所有 Dreamer 智能体都分别在单张 Nvidia A100 GPU 上训练，因此许多研究实验室都可以复现这些实验。
+能够复现全部结果的 Dreamer 公开实现可在项目网站获取。
+
+\paragraph{基准}
+我们在 8 个领域进行了广泛实证研究，覆盖连续与离散动作、视觉与低维输入、稠密与稀疏奖励、不同奖励尺度、2D 与 3D 世界以及程序生成。
+\Cref{fig:bars} 汇总了基准结果，表明 Dreamer 在多样化领域中超过了大量此前专家算法。其中，Dreamer 在所有领域均超过 PPO。
+
+\begin{itemize}
+\itempar{Atari} 这一成熟基准包含 57 个 Atari 2600 游戏，预算为 200M 帧，覆盖多种挑战\citep{bellemare2013ale}。
+我们使用 sticky action 模拟器设置\citep{machado2018revisiting}。
+Dreamer 在只使用少量计算资源的情况下超过了 MuZero 算法\citep{schrittwieser2019muzero}。
+Dreamer 还超过了广泛使用的专家算法 Rainbow\citep{hessel2018rainbow} 和 IQN\citep{dabney2018iqn}。
+\itempar{ProcGen} 该基准包含 16 个游戏，具有随机关卡和视觉干扰，用于测试智能体的稳健性和泛化能力\citep{cobbe2020procgen}。在 50M 帧预算内，Dreamer 匹配调优后的专家算法 PPG\citep{cobbe2021ppg}，并超过 Rainbow\citep{cobbe2020procgen,hessel2018rainbow}。我们的固定超参数 PPO 智能体匹配官方高度调优 PPO 实现的公开分数\citep{cobbe2021ppg}。
+\itempar{DMLab} 该套件包含 30 个任务，使用 3D 环境测试空间和时间推理能力\citep{beattie2016dmlab}。在 100M 帧内，Dreamer 超过可扩展的 IMPALA 和 R2D2+ 智能体在 1B 环境步处的表现\citep{kapturowski2018r2d2}，相当于超过 1000\% 的数据效率提升。
+这些基线并非为数据效率而设计，但它们提供了此前大规模训练可达到性能的有价值参照。
+\itempar{Atari100k} 这一数据效率基准包含 26 个 Atari 游戏，预算仅为 400K 帧，相当于 2 小时游戏时间\citep{kaiser2019simple}。EfficientZero\citep{ye2021effzero} 通过结合在线树搜索、优先回放和超参数调度保持最先进水平，但它也会提前重置关卡以增加数据多样性，使比较更复杂。
+在不引入这些复杂设置的情况下，Dreamer 超过了其余最佳方法，包括基于 Transformer 的 IRIS 和 TWM 智能体、无模型方法 SPR，以及 SimPLe\citep{micheli2022iris}。
+\itempar{Proprio Control} 该基准包含 18 个控制任务，动作为连续动作，输入为本体感知向量，预算为 500K 环境步\citep{tassa2018dmcontrol}。任务范围从经典控制和运动控制到机器人操作，并包含稠密与稀疏奖励。Dreamer 在该基准上达到新的最优结果，超过 D4PG、DMPO 和 MPO\citep{abdolmaleki2018mpo}。
+\itempar{Visual Control} 该基准包含 20 个连续控制任务，智能体只接收高维图像作为输入，预算为 1M 环境步\citep{tassa2018dmcontrol}。
+Dreamer 在该基准上达到新的最优结果，超过专门面向视觉环境并利用数据增强的 DrQ-v2 和 CURL\citep{yarats2021drqv2}。
+\pagebreak
+\itempar{BSuite} 该基准包含 23 个环境、共 468 种配置，专门用于测试信用分配、对奖励尺度和随机性的稳健性、记忆、泛化与探索\citep{osband2019bsuite}。Dreamer 在该基准上达到新的最优结果，超过 Boot DQN 等方法\citep{dizon2023bsuiteagents}。
+相较此前算法，Dreamer 的提升在尺度稳健性类别中尤其明显。
+\end{itemize}
+
+\paragraph{Minecraft}
+在流行游戏 Minecraft 中收集钻石一直是人工智能中的长期难题\citep{guss2019minerl,kanitscheider2021minecraftcurriculum,baker2022vpt}。
+每个 episode 都发生在一个独特、随机生成且无限的 3D 世界中。episode 会持续到玩家死亡，或最多持续 36,000 步（即 30 分钟）；在此期间，玩家需要通过采集资源和制作工具，从稀疏奖励中发现通向钻石的 12 个物品序列。经验丰富的人类玩家通常需要约 20 分钟才能获得钻石\citep{baker2022vpt}。
+我们沿用先前工作的方块破坏设置\citep{kanitscheider2021minecraftcurriculum}，因为原始动作空间会让随机策略很难长时间保持按键。
+
+由于该复杂领域训练时间较长，在 Minecraft 上做大量调参并不现实。
+因此，我们直接使用 Dreamer 的默认超参数。
+如 \cref{fig:minecraft,fig:bars} 所示，Dreamer 是首个无需 VPT 所需的人类数据\citep{baker2022vpt}、也无需自适应课程\citep{kanitscheider2021minecraftcurriculum}，即可从零开始在 Minecraft 中收集钻石的算法。
+我们在 Minecraft 上训练的所有 Dreamer 智能体都能在 100M 环境步内发现钻石。
+相比之下，若干强基线虽然能推进到铁镐等高级物品，但没有任何一个发现钻石。
+
+\paragraph{消融}
+在 \cref{fig:ablations} 中，我们在一组多样化的 14 个任务上消融稳健性技术和学习信号，以理解它们的重要性。
+各个任务的训练曲线包含在补充材料中。
+结果表明，所有稳健性技术都对性能有贡献，其中最明显的是世界模型的 KL 目标，其次是回报归一化，以及用于奖励和值预测的 symexp two-hot 回归。总体来看，每项技术都只在部分任务上起关键作用，并不会同等影响所有任务。
+
+为研究世界模型的作用，我们消融 Dreamer 的学习信号：分别阻止任务相关的奖励和值预测梯度，或任务无关的重建梯度塑造其表征。不同于以往通常只依赖任务相关学习信号的强化学习算法\citep{mnih2015dqn,schrittwieser2019muzero}，Dreamer 主要依赖其世界模型的无监督目标。这一发现表明，未来算法可以考虑利用无监督数据预训练。
+
+\paragraph{尺度性质}
+为研究 Dreamer 能否稳健扩展，我们在 Crafter\citep{hafner2021crafter} 和一个 DMLab 任务\citep{beattie2016dmlab} 上训练了 6 种模型规模（12M 到 400M 参数）以及不同回放比率。回放比率影响智能体执行梯度更新的次数。
+\Cref{fig:ablations} 显示，在比较的模型规模和回放比率范围内，Dreamer 使用固定超参数仍能稳健学习。
+此外，增大模型规模会直接带来更高任务性能和更低数据需求。
+增加梯度步数也会进一步减少学习成功行为所需的环境交互。
+结果表明，Dreamer 在模型规模和回放比率变化下都能稳健学习，并且其性能会随计算资源增加而以较可预测的方式提升。

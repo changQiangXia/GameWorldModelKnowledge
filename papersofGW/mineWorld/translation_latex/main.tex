@@ -1,0 +1,489 @@
+﻿
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2025_conference,times}
+
+\input{math_commands.tex}
+\input{preamble}
+
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{amssymb}
+\usepackage{bbding}
+\usepackage{wrapfig}
+\usepackage{subfigure}
+\usepackage{capt-of}
+\usepackage{authblk}
+\usepackage{float}
+\usepackage{xspace}
+
+\usepackage{tipa}
+\usepackage{pifont}
+\usepackage{makecell}
+\usepackage{utfsym}
+
+\makeatletter
+\DeclareRobustCommand\onedot{\futurelet\@let@token\@onedot}
+\def\@onedot{\ifx\@let@token.\else.\null\fi\xspace}
+
+\def\eg{\emph{e.g}\onedot} \def\Eg{\emph{E.g}\onedot}
+\def\ie{\emph{i.e}\onedot} \def\Ie{\emph{I.e}\onedot}
+\def\cf{\emph{cf}\onedot} \def\Cf{\emph{Cf}\onedot}
+\def\etc{\emph{etc}\onedot} \def\vs{\emph{vs}\onedot}
+\def\wrt{w.r.t\onedot} \def\dof{d.o.f\onedot}
+\def\iid{i.i.d\onedot} \def\wolog{w.l.o.g\onedot}
+\def\etal{\emph{et al}\onedot}
+\makeatother
+
+\newcommand{\IDMMetric}{IDM 动作准确率}
+
+\title{MineWorld：Minecraft 上的实时开源交互式世界模型}
+
+\author{
+\textbf{Junliang Guo$^*$\thanks{$^*$共同一作。通讯作者：Junliang Guo。}, Yang Ye$^*$, Tianyu He$^*$, Haoyu Wu$^*$, Yushu Jiang, Tim Pearce, Jiang Bian}}
+\affil{
+微软研究院\\ 
+{\footnotesize \texttt{\{junliangguo,v-yangye,tianyuhe, v-haoywu\}@microsoft.com}}
+}
+\affil{
+\url{https://aka.ms/mineworld}
+}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\iclrfinalcopy
+
+
+% Chinese translation support
+\usepackage{xeCJK}
+\setCJKmainfont{FandolSong-Regular.otf}[ItalicFont=FandolKai-Regular.otf]
+\setCJKsansfont{FandolHei-Regular.otf}
+\setCJKmonofont{FandolFang-Regular.otf}
+\XeTeXlinebreaklocale "zh"
+\XeTeXlinebreakskip = 0pt plus 1pt
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\renewcommand{\refname}{参考文献}
+\renewcommand{\contentsname}{目录}
+\makeatletter
+\AtBeginDocument{%
+  \@ifundefined{crefname}{}{%
+    \crefname{figure}{图}{图}%
+    \Crefname{figure}{图}{图}%
+    \crefname{table}{表}{表}%
+    \Crefname{table}{表}{表}%
+    \crefname{section}{节}{节}%
+    \Crefname{section}{节}{节}%
+    \crefname{appendix}{附录}{附录}%
+    \Crefname{appendix}{附录}{附录}%
+    \crefname{algocf}{算法}{算法}%
+    \Crefname{algocf}{算法}{算法}%
+  }%
+  \@ifundefined{SetAlgorithmName}{}{\SetAlgorithmName{算法}{算法}{算法列表}}%
+}
+\makeatother
+\raggedbottom
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+世界建模旨在让智能体能够理解环境、响应人类动作，并在动态场景中预测后续状态。本文提出 MineWorld，这是一个面向 Minecraft 的实时开源交互式世界模型。Minecraft 是开放式沙盒游戏，适合作为世界模型研究的测试平台。MineWorld 采用视觉-动作自回归 Transformer，以配对的游戏画面和玩家动作为输入，并生成执行动作后的新画面。具体而言，模型先用图像 tokenizer 和动作 tokenizer 将游戏画面与动作离散化为 token id，再将两类 token 交错排列作为输入序列。模型通过 next-token prediction 学习游戏状态表征以及状态和动作之间的条件关系。推理阶段，本文提出一种并行解码算法，可以同时预测同一帧中空间冗余较强的 token，使不同规模的模型达到每秒 $4$ 到 $7$ 帧，从而支持与玩家的实时交互。
+在评估方面，本文同时衡量视频视觉质量和生成画面对输入动作的遵循程度。实验结果表明，MineWorld 在可控性、视频质量和推理速度上优于已有开源扩散式世界模型。论文还发布了代码和模型权重。
+\end{abstract}
+
+\section{导言}
+\label{sec:intro}
+
+世界模型被广泛用于研究环境模拟和交互预测问题。给定人类或智能体的动作，这类模型需要预测环境后续状态，从而为游戏引擎、强化学习规划器和安全探索提供可学习的模拟器~\citep{ha2018world,yang2023learning,valevski2024diffusion,bruce2024genie,oasis2024,kanervisto2025world,hafner2019dream,wu2024ivideogpt,agarwal2025cosmos}。
+
+近期视频生成模型表明，大规模视频数据可以提供关于物理规律和对象交互的先验知识~\citep{videoworldsimulators2024,parkerholder2024genie2,kanervisto2025world}。不过，将这些模型用于世界模拟仍面临两个问题：效率和可控性。效率问题来自生成目标本身。视觉 tokenizer 编码出的潜在视频表示通常包含大量 token，例如使用当前较强的 tokenizer 表示 $16$ 帧视频时，序列长度可能达到 $40$k 到 $160$k~\citep{yang2024cogvideox,tang2024vidtok,wang2024vidtwin}，从而大幅增加推理成本。可控性问题则来自条件信号的复杂性。视频模型可以接受文本、视频示例或机器人动作等不同形式的条件~\citep{videoworldsimulators2024,zhang2025autoregressive,wu2024ivideogpt}，但目前缺少统一指标来衡量生成结果是否真正遵循输入控制。
+
+本文提出 \textbf{MineWorld}，一个面向 Minecraft 的实时开源交互式世界模型。模型基于自回归 Transformer，通过离散化的游戏画面 token 和动作 token 显式学习视觉状态与控制信号之间的关系。为支持实时交互\footnote{本文在第~\ref{sec:decoding} 节定义了游戏场景中的实时交互。}，我们提出并行解码算法，利用相邻图像 token 的空间依赖关系，同时预测部分 token。该算法相对标准自回归解码取得超过 $3\times$ 的速度提升，且基本保持生成质量。借助这一解码方式，MineWorld 每秒可生成 $4$ 到 $7$ 帧，足以支持人与世界模型之间的实时交互。
+
+为了评估可控性，本文提出了一组不同于传统视频质量指标的评测方法。我们先将 Minecraft 动作离散化为动作词表，再用逆动力学模型~(IDM)~\citep{baker2022video} 从连续生成帧中反推实际执行的动作。若反推动作与输入动作一致，说明生成模型较好地遵循了控制信号。因此，两者之间的准确率可以作为世界模型可控性的度量。
+
+本文的主要贡献如下：
+\begin{itemize}
+    \item 提出 MineWorld，一个基于自回归 Transformer 的开源实时交互式世界模型。
+    \item 提出并行解码算法，在保持生成质量的同时降低自回归推理延迟。
+    \item 提出面向动作可控性的评估指标，用于检验生成序列是否遵循输入控制信号。
+\end{itemize}
+
+\section{框架}
+\label{sec:framework}
+
+\begin{figure}[tbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/archv2-crop.pdf}
+    \caption{MineWorld 模型架构。视觉 tokenizer 和动作 tokenizer 将游戏状态与动作转换为离散 token，交错后作为 Transformer 解码器的输入。Transformer 随后以自回归目标进行训练。}
+    \label{fig:arch}
+\end{figure}
+
+\subsection{概览}
+本节介绍 MineWorld 框架。记 $x_i$ 为 Minecraft 在第 $i$ 步的视觉游戏状态，$a_i$ 为用户在该状态下执行的动作，$x_{i+1}$ 为执行 $a_i$ 后的下一个游戏状态。世界模型的目标是在给定历史观测 $x_{<i}$ 和当前动作 $a_i$ 的条件下预测未来游戏状态，即模拟如下条件分布：
+\begin{equation}
+    \label{equ:world_model}
+    p(x_{i+1} | x_{<i}, a_i).
+\end{equation}
+
+考虑到 Transformer 的缩放性质~\citep{vaswani2017attention,kaplan2020scaling,brown2020language-gpt3} 以及实验中观察到的可控性表现（见第~\ref{sec:exp} 节），MineWorld 采用自回归 Transformer 作为主干。如图~\ref{fig:arch} 所示，该架构包含两个模块：tokenizer 将视频和动作转换为离散 token，Transformer 解码器以交错后的 token 序列作为输入，并以自回归方式训练。
+
+\subsection{架构}
+\label{sec:framework-arch}
+
+\paragraph{Tokenizers}
+模型输入包含两种模态：游戏视频由状态序列 $x_i$ 组成，动作由鼠标和键盘输入组成。因此，我们分别设计视觉 tokenizer 和动作 tokenizer，将两类输入转换为离散 token。
+
+对于游戏视频，我们训练一个 VQ-VAE~\citep{van2017neural,esser2021taming} 作为视觉 tokenizer。考虑到游戏状态和动作在序列中交错出现，本文采用图像级 VQ tokenizer，也就是只进行空间压缩，并让每个状态独立编码；同时具有空间和时间压缩的视频级 tokenizer~\citep{tang2024vidtok} 留作后续工作。具体而言，我们从公开预训练 checkpoint~\citep{patil2024amused} 初始化 VQ tokenizer，并在 Minecraft 数据集上微调。该 tokenizer 在高和宽两个方向上的压缩率均为 $16\times$。因此，对于包含 $n$ 个状态的游戏视频片段 $x$，VQ tokenizer 会将其转换为量化 id 序列 $t$，表示为：
+\begin{equation} 
+\begin{aligned}
+x &= (x_1, \cdots,x_n), \\
+t &= (t_1, \cdots, t_{c}, t_{c+1}, \cdots, t_{2c}, t_{2c+1}, \cdots t_N),
+\end{aligned}
+\end{equation}
+其中 $N=n \cdot c$ 是序列总长度，$c$ 是表示每个状态所需的 id 数量。
+
+Minecraft 动作既包含控制相机角度的连续鼠标移动，也包含游戏引擎定义的离散键鼠动作，例如 \texttt{forward} 和 \texttt{attack}。为处理连续相机移动，我们沿用已有做法~\citep{baker2022video}，将相机角度量化为离散 bins。对于离散动作，考虑到一些动作天然互斥，例如 \texttt{forward} 和 \texttt{backward}，我们将动作划分为 $7$ 个互斥类别，每个类别对应一个 token；另外使用 $2$ 个 token 编码相机角度，并引入 \texttt{[aBOS]} 和 \texttt{[aEOS]} 标记动作序列边界。因此，每个动作由 $11$ 个 token 表示，每个 token 对应完整动作词表中的一个动作 id。
+将动作划分为互斥类别不仅可以缩短动作 token 序列，也使后续使用分类指标评估可控性成为可能，相关指标见第~\ref{sec:eval} 节。
+
+最后，对于原始输入中的每个游戏状态-动作对 $(x_i, a_i)$，tokenizer 将其转换为一段扁平化的离散 id 序列：
+\begin{equation}
+    (t_{i*c+1}, \cdots, t_{(i+1)*c}, [\texttt{aBOS}], t^{a_i}_1, \cdots, t^{a_i}_9, \texttt{[aEOS]}).
+\end{equation}
+
+ 
+\paragraph{Transformer 解码器}
+Transformer 采用 LLaMA 架构~\citep{touvron2023llama}，并使用 RMSNorm~\citep{zhang2019root-rms} 和旋转位置嵌入~\citep{su2024roformer-rope}。模型按照标准自回归解码器训练，每个 token 都以前面的所有 token 为条件：
+\begin{equation}
+    \label{equ:training}
+    f_{\theta}(t) = \prod_{i=1}^N p(t_i | t_{< i}).
+\end{equation}
+注意，本文对游戏状态 token 和动作 token 一视同仁，使模型能够学习二者的交错结构。这样，模型可以同时捕捉状态与动作之间的条件关系：在推理时，它既可以作为策略模型，根据已有观测预测动作 $p(a_{i+1} | x_{<i+1})$；也可以作为世界模型，按公式~(\ref{equ:world_model}) 预测未来状态。本文主要关注其世界模型能力，实验部分也给出作为策略模型使用的案例。
+
+\subsection{并行解码}
+\label{sec:decoding}
+
+\begin{figure}[tbp]
+  \centering
+   \includegraphics[width=1\linewidth]{imgs/decoding-v2-crop.pdf}
+   \caption{两种解码算法示意。游戏状态被编码为 $12$ 个 token，token 中的数字表示生成顺序。(a) 自回归解码按照光栅扫描顺序逐个生成 token。(b) 本文提出的并行解码在每轮生成后，同时生成相邻行和列中的后续 token。}
+   \label{fig:decode-order}
+\end{figure}
+
+对于世界模型而言，能否针对用户控制信号实时生成后续结果至关重要。本文结合职业玩家的每分钟动作数（Actions Per Minute, APM）~\citep{wikipedia:apm} 定义游戏场景中的“实时”。
+\paragraph{实时交互世界模型}
+APM 衡量玩家在一分钟内执行的游戏动作数量，例如按键和鼠标点击。StarCraft 职业玩家的 APM 通常约为 $250$ 到 $300$，初学者约为 $50$~\citep{wikipedia:apm}。作者还对业余玩家做了内部测试，平均约为 $150$ APM。因此，一个能够实时交互的世界模型至少需要超过 $2$ FPS 才能跟上业余玩家；若要跟上职业玩家，则需要约 $5$ FPS。
+
+视觉自回归模型~\citep{liu2024elucidating, yu2023language, kondratyuk2023videopoet} 在图像和视频生成任务中可以得到高保真结果，但其逐 token 生成的特性会成为高分辨率、长时长视频生成中的效率瓶颈。已有方法通常按固定光栅扫描顺序（即从左到右、从上到下）生成视觉 token~\citep{bai2024sequential,yu2023language}，或使用随机顺序~\citep{chang2022maskgit,yu2024randomized}，没有充分利用图像和视频中固有的空间和时间依赖。
+
+为提升实时交互能力，本文采用对角解码（Diagonal Decoding）~\citep{ye2025fast}。这是一种无需重新训练的并行解码算法，它利用相邻图像 token 之间的空间依赖，相比朴素自回归解码能够加快推理，且生成质量下降很小。具体而言，如图~\ref{fig:decode-order} 所示，方法会跨不同行和列同时处理 token。令 $x_{i,j}$ 表示当前游戏状态中位于第 $i$ 行、第 $j$ 列的生成 token，则下一步可同时生成 $x_{i,j+1}$ 和 $x_{i+1,j}$。若 patch 化后的游戏状态高和宽分别为 $h$ 和 $w$，并行解码相对自回归解码的理论加速比为：
+\begin{equation}
+  r = \frac{h \times w}{h+w-1}.
+  \label{eq:accelerate ratio}
+\end{equation}
+由上式可见，图像分辨率越高，并行解码的理论加速空间越大。
+
+并行解码利用相邻 token 的空间冗余，但训练和推理方式不一致可能导致性能下降。为缓解这一问题，本文对自回归预训练模型进行微调，将标准因果注意力 mask 替换为与并行解码算法一致的 mask。这样，模型可以在接近实时的频率下交互，同时保持生成质量。
+
+\paragraph{与相关工作的讨论}
+已有工作也探索过视觉生成模型中的并行解码。LFOR~\citep{li2023lformer} 每轮生成 L 形 token 块，但需要从零训练模型。ZipAR~\citep{he2024zipar} 利用相邻 token 依赖关系提出了面向图像生成的并行解码算法。相比之下，本文关注视频生成；由于跨帧误差会累积，视频生成比单帧图像生成更难。在这一设定下，本文方法相对自回归基线仍能取得较高加速比，说明并行解码适合实时交互式世界模型。
+
+\section{评价}
+\label{sec:eval}
+为了全面评价世界模型在 Minecraft 环境中的表现，本文同时评估生成结果的视频质量和动作可控性，并介绍数据集构建与预处理流程。
+
+\subsection{数据集构建和预处理}
+本文使用 VPT 数据集~\citep{baker2022video}，其中包含录制的 Minecraft 游戏视频以及对应动作；每一帧都配有同一时刻的键盘和鼠标动作。作者过滤掉没有记录动作的帧，也过滤 GUI 打开时的帧，以减少界面对生成结果的干扰。长视频被切分为包含 $16$ 帧的短片段，并随机划分为训练集、验证集和测试集。最终训练集包含 $10$M 个视频片段，即 $160$M 帧；验证集和测试集分别包含 $0.5$k 和 $1$k 个片段。
+
+对于每个原始视频，作者将分辨率从 $360\times 640$ 调整为 $224\times 384$，以降低计算成本，同时保持原始宽高比。根据第~\ref{sec:framework-arch} 节介绍，本文采用空间压缩率为 $16\times$、codebook 大小为 $8$k 的 VQ-VAE，将每帧转换为 $14\times 24$ 个 patch，即 $336$ 个离散 token。再加上动作 tokenizer 编码得到的 $11$ 个动作 token，每个游戏状态-动作对共表示为 $347$ 个 token。每个训练样本包含 $16$ 个状态-动作对，预处理后约为 $5.5$k 个离散 token。整个训练集约包含 $55$B 个 token。
+
+\subsection{评估指标}
+\label{sec:eval-metric}
+
+本文用两类指标评价模型生成结果：视频质量和动作可控性。视频质量指标包括 Fréchet Video Distance（FVD）~\citep{unterthiner2018towards}、峰值信噪比（PSNR）~\citep{hore2010image}、LPIPS~\citep{zhang2018unreasonable} 和结构相似性指数（SSIM）~\citep{wang2004image}。
+
+可控性表示生成的游戏状态在多大程度上与给定动作和历史状态一致，这是准确世界模型的关键要求。为评估可控性，本文使用逆动力学模型（IDM）~\citep{baker2022video}，从生成状态和前一状态中反推动作。IDM 是一个双向模型，输入为游戏状态，输出为两帧之间的动作。本文使用 VPT 工作中提供的高精度预训练 IDM，其按键预测准确率为 $90.6 \%$~\citep{baker2022video}。不过，动作标签高度不均衡，例如 \texttt{forward} 和 \texttt{attack} 比 \texttt{use} 和 \texttt{drop} 更常见；同时动作空间还混合了离散键盘动作和连续相机移动。因此，本文分别设计两类指标。
+
+\paragraph{动作分类} 
+按照动作 tokenizer 的划分，动作被归为 $9$ 个类别，其中 $7$ 个类别对应离散动作，另外 $2$ 个类别对应相机移动角度。对于离散类别，每类包含两个或三个互斥动作，例如 $(\texttt{forward}, \texttt{backward})$ 和 $(\texttt{left}, \texttt{right})$；完整分组见表~\ref{tab:subtask}。以输入动作作为真值、IDM 反推动作作为预测值，本文使用精确率、召回率和 F1 分数评价分类准确性。为减轻标签不均衡影响，论文报告宏平均分数。
+
+\paragraph{相机移动。} 
+相机移动由玩家视角旋转角度表示，并与离散动作分开处理。沿用 VPT~\citep{baker2022video} 的做法，本文将 X 和 Y 轴上的相机旋转分别离散化为 $11$ 个 bin，每个 bin 对应一个角度范围。该设计对小幅移动提供更细粒度表示，对大幅旋转使用更宽的区间，从而平衡精度和覆盖范围。相机移动的可控性用预测 bin 与真值 bin 之间的 L1 损失衡量。
+
+\subsection{实现细节}
+
+视觉 tokenizer 从公开预训练 checkpoint~\citep{patil2024amused} 初始化，并在预处理后的 VPT 训练数据上微调。附录~\ref{app:more_results} 给出重建结果，可以看到微调后的 tokenizer 在 VPT 验证集上具有较好的重建质量。
+
+Transformer 解码器采用 LLaMA~\citep{touvron2023llama} 架构。为研究规模效应，作者训练了 $300$M、$700$M 和 $1.2$B 三种参数规模的模型。图像 tokenizer 的词表大小为 $8192$，动作词表提供额外 $70$ 个 id，因此最终词表大小为 $8262$。模型使用 AdamW 优化器和余弦衰减学习率调度器，在 $32$ 张 NVIDIA 40G A100 GPU 上用 PyTorch~\citep{paszke2019pytorch} 训练 $200$k 步。更多训练细节见附录~\ref{app:model_config}。
+
+
+\section{实验}
+\label{sec:exp}
+
+本节报告 MineWorld 的实验结果，并将其与 Oasis~\citep{oasis2024} 对比。Oasis 是一个面向 Minecraft 的开源扩散式世界模型。
+
+\subsection{主要结果}
+
+\begin{table}[tb]
+\begin{center}
+\small
+\caption{与 Oasis~\citep{oasis2024} 的生成结果对比。“FPS”表示模型每秒生成帧数。“P”、“R”、“F1”分别表示离散动作分类的精确率、召回率和 F1 分数。“L1”表示相机控制损失。}
+	\label{tab:main_results}
+        \setlength\tabcolsep{6pt}
+	\begin{tabular}{lc|c|cccc|cccc}
+		\toprule[1pt]
+		方法&参数量&FPS$\uparrow$ & P$\uparrow$ & R$\uparrow$ & F1$\uparrow$ & L1$\downarrow$ &FVD$\downarrow$ &LPIPS$\downarrow$ &SSIM$\uparrow$ &PSNR$\uparrow$ \\
+		\midrule
+		Oasis& 500M & 2.58 & 0.49 & 0.44 & 0.41 & 2.60 & 377 & 0.53 & 0.36 & 14.38 \\ 
+        \midrule
+		\multirow{3}{*}{MineWorld} & 300M & \textbf{5.91} & 0.72 & 0.71 & 0.70 & 1.03 & 246 & 0.45 & 0.38 & 15.13  \\
+		       & 700M & 3.18 & 0.72 & 0.71  & 0.70 & 1.04 & 231 & 0.44 & 0.38 & 15.32  \\
+		       & 1.2B & 3.01 & \textbf{0.76} & \textbf{0.73} & \textbf{0.73} & \textbf{1.02}  &  \textbf{227} & \textbf{0.44} & \textbf{0.41} & \textbf{15.69}   \\
+		\bottomrule[1pt]
+	\end{tabular}
+ \vspace{-3mm}
+\end{center}
+\end{table}
+
+表~\ref{tab:main_results} 报告 MineWorld 与 Oasis 的结果，包括视频质量和可控性指标。Oasis 结果来自其开源 $500$M 模型和推理代码。相比之下，MineWorld 各规模模型在可控性和视频质量两方面均取得更好结果。Oasis 博客声称有更高视频质量和更快推理速度~\footnote{\url{https://oasis-model.github.io}}，但需要更大的模型、专用芯片和推理引擎，而这些系统没有公开。MineWorld 的并行解码与硬件和系统优化正交，因此未来可以与相关工程优化结合。
+
+不同规模的 MineWorld 显示出清晰的 scaling 行为。更大模型通常带来更好的可控性和视频质量。推理速度方面，在并行解码的帮助下，最大的 $1.2$B 模型也能达到 $3$ FPS，也就是每秒生成 $3$ 个游戏状态，约可响应 $180$ APM，接近多数业余玩家的交互频率。最高效的 $300$M 模型约对应 $360$ APM，可支持更高水平玩家的交互。
+
+\subsection{分析}
+\label{sec:analysis}
+
+\paragraph{并行解码的效果}
+
+\begin{table}[tb]
+\begin{center}
+\small
+\caption{不同规模 MineWorld 在默认自回归解码和并行解码下的性能。“w/ FT”和“w/o FT”分别表示是否对自回归预训练模型使用并行注意力 mask 微调。为保持表格紧凑，这里只列出效率和效果相关的主要指标。}
+	\label{tab:parallel}
+        \setlength\tabcolsep{10pt}
+	\begin{tabular}{lc|cccc}
+		\toprule[1pt]
+		参数量&解码&FPS$\uparrow$ & F1$\uparrow$ &PSNR$\uparrow$ &FVD$\downarrow$ \\
+		\midrule
+		\multirow{3}{*}{300M} & AT & 2.00 & 0.70 & 15.63 & 223  \\
+        	                 &并行 w/ FT& 5.91 & 0.70 & 15.13 & 246 \\
+        	                 &并行 w/o FT& 5.91 & 0.69 & 14.98 & 275 \\
+        \midrule
+		\multirow{3}{*}{700M} & AT  & 1.08 & 0.73  & 15.74 & 210 \\
+        	                 &并行 w/ FT& 3.18 & 0.71 & 15.32 & 231 \\
+        	                 &并行 w/o FT& 3.18 & 0.70 & 15.27 & 247 \\ 
+        \midrule
+		\multirow{3}{*}{1.2B} & AT & 0.89 & 0.72 & 16.06 &  203 \\
+        	                 &并行 w/ FT& 3.01 & 0.73 & 15.69 & 227 \\
+        	                 &并行 w/o FT& 3.01 & 0.70 & 15.30 & 258 \\
+		\bottomrule[1pt]
+	\end{tabular}
+ \vspace{-3mm}
+\end{center}
+\end{table}
+
+表~\ref{tab:parallel} 比较了自回归解码和并行解码。首先，模型越大，并行解码表现越稳定，即使不做微调也能保持较好质量。$1.2$B MineWorld 使用并行解码时获得约 $3\times$ 推理加速，同时可控性和视频质量仍接近自回归解码。
+
+其次，使用并行注意力 mask 微调可以进一步提升并行解码性能。对于 $300$M 模型，微调后模型能接近自回归基线，同时保留约 $3\times$ 的延迟优势。这说明从训练阶段就纳入并行注意力 mask 可能进一步降低训练和推理成本。
+
+\paragraph{可控性指标的有效性}
+
+\begin{wraptable}{r}{0.35\textwidth}
+    \centering    
+    \caption{本文指标与人类可控性评分之间的相关性。} 
+    \begin{tabular}{l|c}
+    \toprule
+      F1  & $0.81$ \\    
+      人类& $4.21$ \\
+      $r$ & $0.56$ \\
+      p-value& $0.01$ \\
+    \bottomrule  
+    \end{tabular}       
+    \label{tab:correlation}
+\end{wraptable}
+
+为验证第~\ref{sec:eval-metric} 节提出的指标是否能衡量可控性，作者进行人类评估，并计算指标与人工评分之间的相关系数。实验从测试集中抽取 $20$ 个游戏视频片段，邀请 $5$ 名有经验的玩家根据后续动作是否合理给每个片段打分。参与者会看到游戏状态及其对应动作，并按 1 到 5 分评分；最终取平均分。然后在所有样本上计算皮尔逊相关系数。
+
+实验使用带自回归解码的 $700$M 模型，结果见表~\ref{tab:correlation}。其中 $r$ 表示皮尔逊相关系数，p-value 表示相应的统计检验结果。结果显示，基于分类的评测指标与人类评分之间存在稳定的正相关关系，说明该指标能反映模型的动作可控性。
+
+\subsection{案例研究}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=1.0\linewidth]{imgs/case-crop.pdf}
+  \vspace{-3mm}
+  \caption{MineWorld $700$M 模型案例研究。输入包含初始游戏状态和后续步骤的动作，模型据此生成之后的游戏状态。更多案例和视频见项目页面。}
+  \label{fig:case}
+\end{figure}
+
+本节给出 MineWorld 案例研究，用于展示模型的可控性和视频质量。案例使用带自回归解码的 $700$M 模型。
+
+\paragraph{基础能力}
+图~\ref{fig:case} 展示了 MineWorld 的几种基础能力。给定初始游戏状态后，模型根据后续动作生成对应状态。例一中，动作引导模型开门并走出室内，模型能够生成开门过程以及之前不可见的室外环境。例二展示砍树过程，模型生成了木材横截面和方块破碎后的视觉效果。例三中，房屋出现在初始帧中，镜头先转离再转回，模型在镜头返回时仍能较一致地恢复同一栋房屋。
+
+这些案例表明，MineWorld 学到了一部分 Minecraft 中的交互规律，能够对不同动作产生相应视觉变化，同时维持较好的画面一致性。
+
+\paragraph{可控性}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=1.0\linewidth]{imgs/case_control_crop.pdf}
+  \vspace{-3mm}
+\caption{MineWorld 可控性案例。给定相同初始游戏状态和不同动作，模型生成对应的不同结果。}
+  \label{fig:case_control}
+\end{figure}
+
+图~\ref{fig:case_control} 展示 MineWorld 的可控性：在相同初始状态下，不同动作会得到不同生成结果。该现象说明模型能够根据动作条件改变后续画面。
+
+\paragraph{作为智能体}
+
+\begin{figure}[tb]
+  \centering
+  \includegraphics[width=1.0\linewidth]{imgs/case_dream_crop.pdf}
+  \vspace{-3mm}
+  \caption{将 MineWorld 作为游戏智能体的案例。给定若干初始游戏状态和动作（虚线前），MineWorld 继续迭代生成未来游戏状态和动作。}
+  \label{fig:case_dream}
+\end{figure}
+
+由于 MineWorld 在训练时同时预测游戏状态 token 和动作 token，它同时具备世界模型和策略模型的能力。这使得 MineWorld 可以作为自包含的游戏智能体：给定用户提供的若干初始游戏状态和动作后，模型迭代预测未来状态和动作，从而继续进行游戏。
+
+如图~\ref{fig:case_dream} 所示，MineWorld 可以生成多样且符合上下文的动作，并生成较准确的游戏状态。这说明它除作为交互式世界模拟器外，也可作为构建游戏智能体的基础组件。
+
+\section{结论和限制}
+
+本文介绍 MineWorld，一个面向 Minecraft 的开源实时交互式世界模型。模型使用包含游戏状态和对应动作的数据集，分别用视觉 tokenizer 和动作 tokenizer 离散化两种模态，并将状态 token 与动作 token 交错后输入自回归 Transformer 解码器，通过 next-token prediction 训练。为支持实时交互，本文利用相邻图像 token 的冗余性提出并行解码算法，在基本保持生成质量的同时，相比标准自回归解码获得稳定加速。实验表明，MineWorld 在可控性、视频质量和推理速度上均有较好表现，可达到 $2\sim6$ FPS，从而支持与玩家的实时交互。
+
+\paragraph{限制}
+MineWorld 只在固定下采样分辨率的 Minecraft 数据上训练，因此泛化到其他视频领域（例如互联网视频）或生成更高分辨率输出的能力有限。下采样也可能损失游戏状态中的细粒度细节。模型最大输入长度为 $5.5$k token，对应 $16$ 个状态-动作对；MineWorld 在这一范围内具有较好的时间一致性，但当游戏状态间隔超过该上下文长度时，一致性不能保证。
+
+\bibliography{main}
+\bibliographystyle{iclr2025_conference}
+
+\newpage
+\appendix
+
+\section{Minecraft 动作空间}
+
+\subsection{动作评估细节}
+
+\begin{table}[htbp]
+\centering
+\caption{分类任务及其标签。}
+\begin{tabular}{ l|c|c }
+\toprule[1pt]
+\textbf{任务类型} & \textbf{动作} & \textbf{标签} \\
+\midrule
+\multirow{3}{*}{三分类} & \texttt{forward}, \texttt{backward} & \texttt{forward}, \texttt{backward}, \texttt{null} \\
+& \texttt{left}, \texttt{right} & \texttt{left}, \texttt{right}, \texttt{null} \\
+& \texttt{sprint}, \texttt{sneak} & \texttt{sprint}, \texttt{sneak}, \texttt{null} \\
+\midrule
+\multirow{4}{*}{二分类} & \texttt{use} & \texttt{use}, \texttt{null} \\
+& \texttt{attack} & \texttt{attack}, \texttt{null} \\
+& \texttt{jump} & \texttt{jump}, \texttt{null} \\
+& \texttt{drop} & \texttt{drop}, \texttt{null} \\
+\bottomrule
+\end{tabular}
+\label{tab:subtask}
+\end{table}
+
+Minecraft 动作空间较复杂。为有效验证动作执行质量，本文聚焦十种最常见动作和相机移动来简化评估。将动作预测视为单一多分类任务不能充分描述序列动作的复杂性，因此作者根据动作之间的互斥关系，将 $10$ 个动作划分为 $3$ 个三分类任务和 $4$ 个二分类任务。如果 IDM 预测同一帧中出现两个互斥动作，则按照常见游戏行为将其归为“无动作”。最后，对所有任务计算宏平均精确率、召回率和 F1 分数。
+
+
+
+\subsection{各子任务精确率}
+
+\begin{table}[htbp]
+\centering
+\caption{$700$M MineWorld 模型在不同任务上的精确率、召回率和 F1 分数。}
+\begin{tabular}{ l|c|c|c|c|c|c|c }
+\toprule[1pt]
+\textbf{指标} & \textbf{前后移动} & \textbf{左右移动} & \textbf{冲刺/潜行} & \textbf{使用} & \textbf{攻击} & \textbf{跳跃} & \textbf{丢弃} \\
+\midrule
+\textbf{精确率} & 0.807 & 0.808 & 0.765 & 0.742 & 0.729 & 0.760 & 0.500 \\
+\textbf{召回率} & 0.773 & 0.745 & 0.788 & 0.648 & 0.749 & 0.847 & 0.498 \\
+\textbf{F1} & 0.782 & 0.771 & 0.750 & 0.682 & 0.736 & 0.796 & 0.499 \\
+\bottomrule
+\end{tabular}
+\label{tab:specific_prf}
+\end{table}
+
+在表~\ref{tab:subtask} 定义子分类任务后，可以进一步分析模型在动作预测上的表现。表~\ref{tab:specific_prf} 给出 $700$M MineWorld 在各任务上的精确率、召回率和 F1 分数。结果显示，模型在 \texttt{drop} 动作上的表现明显弱于其他动作，说明该动作更难学习。
+
+\section{模型配置}
+\label{app:model_config}
+
+\begin{table}[htbp]
+    \centering
+    \caption{不同模型大小的配置。}
+    \begin{tabular}{l|c|c|c|c}
+        \toprule[1pt]
+            & \textbf{隐藏维度} & \textbf{MLP 维度} & \textbf{注意力头数} & \textbf{层数} \\
+        \midrule
+        300M &  1024 & 4096 & 16 & 20  \\
+        700M &  2048 & 4096 & 32 & 20 \\
+        1.2B &  2048 & 8192 & 32 & 20 \\
+        \bottomrule[1pt]
+    \end{tabular}
+    \label{tab:model_arch}
+\end{table}
+
+\begin{table}[htbp]
+    \centering
+    \caption{优化超参数。}
+    \begin{tabular}{c|c}
+        \toprule[1pt]
+       \textbf{超参数}  &  \textbf{数值} \\
+       \midrule
+       学习率调度&余弦衰减\\
+       学习率& $3\times10^{-4}$ \\
+       warmup 步数& 10000 \\
+       重量衰减& 0.1 \\
+       优化器&AdamW\\
+       AdamW $\beta$s& $(0.9, 0.95)$ \\
+       最大位置数& $5376$ \\
+       \bottomrule[1pt]
+    \end{tabular}
+    \label{tab:hyperparams}
+\end{table}
+
+为了验证 Transformer 解码器的缩放行为，我们在 LLaMA 架构内训练了三种不同大小的模型：$300$M、$700$M 和 $1.2$B。通过调整隐藏维度、MLP 维度和层数，可以得到不同规模的模型。具体配置见表~\ref{tab:model_arch}，训练所用优化器及其超参数见表~\ref{tab:hyperparams}。
+
+\section{更多结果}
+\label{app:more_results}
+
+\subsection{视觉 tokenizer 的重建结果}
+
+\begin{table}[htbp]
+\begin{center}
+\footnotesize
+\caption{验证集上视觉 tokenizer 的重建性能。}
+	\label{tab:visual_tokenizer}
+        \setlength\tabcolsep{8pt}
+        \renewcommand\arraystretch{1.1}
+	\begin{tabular}{l|cccc}
+		\toprule[1pt]
+		视觉 tokenizer&PSNR$\uparrow$ &SSIM$\uparrow$ &LPIPS$\downarrow$ &FID$\downarrow$ \\
+		\midrule
+		AMUSED~\citep{patil2024amused} & 25.91 & 0.758 & 0.238 & 35.05 \\
+        本文方法& 29.24 & 0.816 & 0.134 & 18.93 \\
+		\bottomrule[1pt]
+	\end{tabular}
+\end{center}
+\end{table}
+
+我们评估了预训练 VQ-VAE~\citep{patil2024amused} 以及在预处理 VPT 数据上微调后的视觉 tokenizer 的重建性能。结果显示，微调后各项指标均有明显改善，说明面向 Minecraft 数据适配视觉 tokenizer 是必要的。
+
+
+\end{document}
+

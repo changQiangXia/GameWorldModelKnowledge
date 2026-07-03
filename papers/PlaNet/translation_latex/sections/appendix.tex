@@ -1,0 +1,118 @@
+\section{超参数}
+\label{sec:hparams}
+
+我们采用\citet{ha2018worldmodels}中的卷积和反卷积网络，在动力学模型中使用包含$200$个单元的 GRU \citep{cho2014gru}作为确定性路径，并将其他函数实现为两个大小为$200$、带 ReLU 激活的全连接层\citep{nair2010relu}。潜在空间中的分布为$30$维对角高斯分布，其均值和标准差由模型预测。
+
+我们按照\citet{kingma2018glow}的做法，将图像比特深度降至 5 bit 作为预处理。模型使用 Adam 优化器训练\citep{kingma2014adam}，学习率为$10^{-3}$，$\epsilon=10^{-4}$，梯度裁剪范数为$1000$；批次由$B=50$个长度为$L=50$的序列片段组成。我们没有相对于重建项缩放 KL 散度项，而是通过将散度损失裁剪到不低于该值，给予模型$3$个 free nats。在智能体的早期版本中，我们使用过潜在过冲和一个额外固定的全局先验，但后来发现它们并非必要。
+
+规划时，我们使用 CEM，规划视野长度$H=12$，优化迭代次数$I=10$，候选样本数$J=1000$，并用最优的$K=100$条序列重新拟合分布。训练从$S=5$个随机动作种子回合开始；之后每经过$C=100$个更新步骤就额外收集一个回合，并加入$\epsilon\sim\Normal(0,0.3)$的动作噪声。动作重复次数因域而异：cartpole（$R=8$）、reacher（$R=4$）、cheetah（$R=4$）、finger（$R=2$）、cup（$R=4$）、walker（$R=2$）。我们发现重要的超参数包括动作重复次数、KL 散度尺度$\beta$和学习率。
+
+\section{规划算法}
+\input{algorithms/planning}
+
+\clearpage
+\section{多任务学习}
+\label{sec:exp_multi}
+\input{figures/score_multi/figure_avg}
+\input{figures/score_multi/figure}
+
+\clearpage
+\section{潜在过冲}
+\label{sec:exp_overshooting}
+\input{figures/score_overshooting/figure}
+
+\clearpage
+\section{激活函数}
+\label{sec:exp_activation}
+\input{figures/score_activation/figure}
+
+\clearpage
+\section{下界推导}
+\label{sec:derivs}
+
+\paragraph{单步预测分布}
+
+对于潜在动力学模型 $\p(o_{1:T},s_{1:T}|a_{1:T})=\prod_t\p(s_t|s_{t-1},a_{t-1})\p(o_t|s_t)$ 以及变分后验 $\q(s_{1:T}|o_{1:T},a_{1:T})=\prod_t\q(s_t|o_{\leq t},a_{<t})$，可由重要性加权和 Jensen 不等式得到如下变分下界：
+\begin{equation}
+\begin{aligned}
+\ln\p(o_{1:T}|a_{1:T})
+&\triangleq\ln\E[\bigg]{\p(s_{1:T}|a_{1:T})}{\prod_{t=1}^T \p(o_t|s_t)} \\
+&=\ln\E[\bigg]{\q(s_{1:T}|o_{1:T},a_{1:T})}{\prod_{t=1}^T \p(o_t|s_t)\p(s_t|s_{t-1},a_{t-1})/\q(s_t|o_{\leq t},a_{<t})} \\
+&\geq\E[\bigg]{\q(s_{1:T}|o_{1:T},a_{1:T})}{\sum_{t=1}^T \ln\p(o_t|s_t)+\ln\p(s_t|s_{t-1},a_{t-1})-\ln\q(s_t|o_{\leq t},a_{<t})} \\
+&=\sum_{t=1}^T \Big(
+ \describe{\Ebelow{\q(s_t|o_{\leq t},a_{<t})}{\ln\p(o_t|s_t)}}{reconstruction}
+ -\describe{\Ebelow[\big]{\q(s_{t-1|o_{\leq t-1},a_{<a-1}})}{\KL{\q(s_t|o_{\leq t},a_{<t})}{\p(s_t|s_{t-1},a_{t-1})}}}{complexity} \Big).
+\end{aligned}
+\label{eq:elbo_deriv}
+\end{equation}%
+
+\paragraph{多步骤预测分布}
+
+对 $d$ 步预测分布 $\pr[p_d](o_{1:T},s_{1:T}|a_{1:T})=\prod_t\p(s_t|s_{t-d},a_{t-1})\p(o_t|s_t)$ 和变分后验 $\q(s_{1:T}|o_{1:T},a_{1:T})=\prod_t\q(s_t|o_{\leq t},a_{<t})$，可以得到类似的下界。第二个不等式来自将对数移入多步先验项；这些先验满足递推关系 $\p(s_t|s_{t-d},a_{t-d-1:t-1})=\E{\p(s_{t-1}|s_{t-d},a_{t-d-1:t-2})}{\p(s_t|s_{t-1},a_{t-1})}$。
+\begin{equation}
+\begin{aligned}
+\ln\pr[p_d](o_{1:T}|a_{1:T})
+&\triangleq\ln\E[\bigg]{\pr[p_d](s_{1:T}|a_{1:T})}{\prod_{t=1}^T\p(o_t|s_t)} \\
+&=\ln\E[\bigg]{\q(s_{1:T}|o_{1:T},a_{1:T})}{\prod_{t=1}^T \p(o_t|s_t)\p(s_t|s_{t-d},a_{t-d-1:t-1})/\q(s_t|o_{\leq t},a_{<t})} \\
+&\geq\E[\bigg]{\q(s_{1:T}|o_{1:T},a_{1:T})}{\sum_{t=1}^T \ln\p(o_t|s_t)+\ln\p(s_t|s_{t-d},a_{t-d-1:t-1})-\ln\q(s_t|o_{\leq t},a_{<t})} \\
+&\geq\E[\bigg]{\q(s_{1:T}|o_{1:T},a_{1:T})}{\sum_{t=1}^T \ln\p(o_t|s_t)+\Ebelow{\p(s_{t-1}|s_{t-d},a_{t-d-1:t-2})}{\ln\p(s_t|s_{t-1},a_{t-1})}-\ln\q(s_t|o_{\leq t},a_{<t})} \\
+&=\sum_{t=1}^T \Big(
+ \describe{\E{\q(s_t|o_{\leq t},a_{<t})}{\ln\p(o_t|s_t)}}{reconstruction}
+ -\describe{\Ebelow[\big]{\p(s_{t-1}|s_{t-d},a_{t-d-1:t-2})\q(s_{t-d}|o_{\leq t-d},a_{<t-d})}{\KL{\q(s_t|o_{\leq t},a_{<t})}{\p(s_t|s_{t-1},a_{t-1})}}}{multi-step prediction} \Big).
+\end{aligned}
+\label{eq:dstep_deriv}
+\end{equation}%
+由于所有期望都位于目标外层，可以直接用样本均值替换期望，从而得到该下界的无偏估计。
+
+\paragraph{单步和多步预测分布之间的关系}
+
+我们猜想，在数据集期望意义下，多步预测分布 $\pr[p_d](o_{1:T})$ 是同一潜在序列模型中单步预测分布 $\p(o_{1:T})$ 的下界。由于潜在状态序列满足 Markov 性质，对于 $d\geq 1$，数据处理不等式给出：
+\begin{gather}
+\begin{aligned}
+\MI{s_t;s_{t-d}} &\leq \MI{s_t;s_{t-1}} \\
+\H{s_t}-\H{s_t|s_{t-d}} &\leq \H{s_t}-\H{s_t|s_{t-1}} \\
+\E{}{\ln\p(s_t|s_{t-d})} &\leq \E{}{\ln\p(s_t|s_{t-1})} \\
+\E{}{\ln\pr[p_d](o_{1:T})} &\leq \E{}{\ln\p(o_{1:T})}.
+\end{aligned}
+\label{eq:dataproc_deriv}
+\end{gather}
+因此，对多步预测分布的任何下界，包括 \cref{eq:dstep_deriv} 和 \cref{eq:latov}，也都是单步预测分布的下界。
+
+\clearpage
+\section{其他相关工作}
+\label{sec:more_related_work}
+
+\paragraph{状态空间规划}
+
+当智能体能够访问环境的低维状态时，可以直接在状态空间中学习动力学。在状态变量很少的控制任务中，例如 cartpole 和 mountain car，PILCO \citep{deisenroth2011pilco} 使用高斯过程建模动力学，并取得了很高的样本效率。使用神经网络动力学模型的类似方法可以解决双连杆平衡问题\citep{gal2016deeppilco,higuera2018synthesizing}，也可以通过梯度进行规划\citep{henaff2018planbybackprop}。\citet{chua2018pets} 使用神经网络集成，并将方法扩展到 cheetah run 任务。这些方法的局限在于，它们可以访问底层系统的低维 Markov 状态，有时还可以访问奖励函数。\citet{amos2018awareness} 在机器人手主动探索中使用观测空间过冲来训练确定性模型。相比之下，我们不依赖低维状态表示，而是使用潜在动力学模型解决来自图像的控制任务。
+
+\paragraph{混合智能体}
+
+基于模型的 RL 面临若干挑战，这促使研究者提出混合智能体：有的方法通过在想象经验上训练来加速策略学习\citep{kalweit2017blending,nagabandi2017mbmf,kurutach2018modeltrpo,buckman2018steve,ha2018worldmodels}，有的方法改进特征表示\citep{wayne2018merlin,igl2018dvrl}，也有方法直接利用模型包含的信息\citep{weber2017i2a}。\citet{srinivas2018upn} 学习一个集成规划计算的策略网络，用强化学习训练且不使用预测损失，但训练时需要专家示范。
+
+\paragraph{多步骤预测}
+
+研究者已经探索多年如何用多步预测训练序列模型。Scheduled sampling \citep{bengio2015scheduled} 会在训练过程中改变序列模型的展开距离。Hallucinated replay \citep{talvitie2014hallucinated} 将预测结果混入数据集，从而间接训练多步预测。\citet{venkatraman2015dad} 采用模仿学习视角；最近，\citet{amos2018awareness} 同时针对所有多步预测训练动力学模型。我们将这一思路推广到通过变分推断训练的潜在序列模型。
+
+\paragraph{潜在序列模型}
+
+早期工作已经研究过非马尔可夫观测序列的建模，包括带确定性隐藏状态的循环神经网络（RNN）和概率状态空间模型（SSM）。变分自编码器的思想\citep{kingma2013vae,rezende2014vae}推动了通过变分推断训练非线性 SSM 的方法\citep{krishnan2015deepkalman}。VRNN \citep{chung2015vrnn} 将 RNN 与 SSM 结合，并同样用变分推断训练。与我们的 RSSM 不同，它会把生成的观测反馈回模型，因此前向预测代价较高。\citet{karl2016dvbf} 通过限制转移函数来缓解塌缩到单一未来的问题，\citet{moerland2017learning} 关注多模态转移，\citet{doerr2018prssm} 则稳定了纯随机模型的训练。\citet{buesing2018dssm} 提出了与我们相似的模型，但将其用于混合智能体，而不是用于显式规划。
+
+\paragraph{视频预测}
+
+视频预测是深度学习中的活跃研究方向。\citet{oh2015atari} 和 \citet{chiappa2017recurrent} 使用确定性模型在 Atari 游戏中得到视觉上可信的预测。\citet{kalchbrenner2016vpn} 提出自回归视频预测模型，使用带门控的 CNN 和 LSTM。近期方法为模型引入随机性，以捕捉多个可能未来\citep{babaeizadeh2017sv2p,denton2018stochastic}。为获得更真实的预测，\citet{mathieu2015deep} 和 \citet{vondrick2016generating} 使用对抗损失。在模拟环境中，\citet{gemici2017temporalmemory} 用外部记忆增强动力学模型，以记住长期上下文。\citet{van2017vq} 提出一种变分模型，通过最近邻查找避免采样，从而得到高保真图像预测。这些模型与我们的方法互为补充。
+
+\clearpage
+\section{视频预测}
+\label{sec:prediction}
+\input{figures/prediction/figure}
+
+\clearpage
+\section{状态诊断}
+
+\input{figures/diagnostics/figure}
+
+\clearpage
+\section{规划参数}
+
+\input{figures/mpc/figure}

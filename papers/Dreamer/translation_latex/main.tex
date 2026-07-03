@@ -1,0 +1,104 @@
+\documentclass{article}
+\input{commands}
+
+\title{\vspace*{-2ex}梦中控制：学习行为\\通过潜在想象}
+
+\author{%
+Danijar Hafner\,\thanks{通讯作者：Danijar Hafner <mail@danijar.com>.} \\
+University of Toronto \\
+Google Brain \\
+\And
+Timothy Lillicrap \\
+DeepMind
+\And
+Jimmy Ba \\
+University of Toronto
+\And
+Mohammad Norouzi \\
+Google Brain}
+
+% \hypersetup{draft} % Allow page breaks in links for now.
+
+
+
+% Chinese translation support
+\usepackage{xeCJK}
+\setCJKmainfont{FandolSong}[ItalicFont=FandolKai]
+\setCJKsansfont{FandolHei}
+\setCJKmonofont{FandolFang}
+\XeTeXlinebreaklocale "zh"
+\XeTeXlinebreakskip = 0pt plus 1pt
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\figurename}{图}
+\renewcommand{\tablename}{表}
+\makeatletter
+\@ifundefined{captionsetup}{}{%
+ \captionsetup[figure]{name=图}%
+ \captionsetup[table]{name=表}%
+}
+\renewcommand{\fnum@figure}{图~\thefigure}
+\renewcommand{\fnum@table}{表~\thetable}
+\makeatother
+\renewcommand{\refname}{参考文献}
+\renewcommand{\contentsname}{目录}
+\makeatletter
+\renewcommand\bibsection{\section*{参考文献}}
+\makeatother
+\renewenvironment{abstract}{%
+\begin{center}%
+\bfseries 摘要\vspace{-.5ex}%
+\end{center}%
+\quote%
+\begin{hyphenrules}{nohyphenation}%
+\setlength\parskip{.5ex plus .5ex}}{%
+\end{hyphenrules}%
+\endquote}
+\makeatletter
+\AtBeginDocument{%
+ \@ifundefined{crefname}{}{%
+ \crefname{figure}{图}{图}%
+ \Crefname{figure}{图}{图}%
+ \crefname{table}{表}{表}%
+ \Crefname{table}{表}{表}%
+ \crefname{section}{节}{节}%
+ \Crefname{section}{节}{节}%
+ \crefname{appendix}{附录}{附录}%
+ \Crefname{appendix}{附录}{附录}%
+ \crefname{algocf}{算法}{算法}%
+ \Crefname{algocf}{算法}{算法}%
+ }%
+ \@ifundefined{SetAlgorithmName}{}{\SetAlgorithmName{算法}{算法}{算法列表}}%
+}
+\makeatother
+\raggedbottom
+
+\begin{document}
+
+\maketitle
+\lhead{发表于 ICLR 2020 会议论文}
+
+\vspace*{-5ex}
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/overview}
+\input{sections/behavior}
+\input{sections/dynamics}
+\input{sections/related}
+\vspace*{5ex}
+\pagebreak
+
+\input{sections/experiments}
+\input{sections/conclusion}
+
+\clearpage
+\bibliography{references}
+
+\clearpage
+\appendix
+\raggedbottom
+\input{sections/appendix}
+
+\end{document}

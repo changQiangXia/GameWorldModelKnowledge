@@ -1,0 +1,29 @@
+\input{figures/tasks/figure}
+
+\enlargethispage{2ex}
+
+\section*{导言}
+\label{sec:intro}
+
+强化学习使计算机能够通过与环境交互来解决任务，例如在 Go 和 Dota 等游戏中达到甚至超过人类水平\citep{silver2016alphago,openai2018dota}。
+它也是改进大型语言模型的重要工具，可以帮助模型获得预训练数据之外的行为能力\citep{ouyang2022rlhf,le2022coderl}。
+PPO \citep{schulman2017ppo} 已成为强化学习中的常用基线，但在追求更高性能时，研究者往往仍要针对具体任务设计更专门的算法。
+不同应用领域带来的困难并不相同，包括连续控制\citep{lillicrap2015ddpg}、离散动作\citep{mnih2015dqn,schrittwieser2019muzero}、稀疏奖励\citep{jaderberg2016unreal}、图像输入\citep{anand2019ataristaterep}、空间环境\citep{driess2022nerfrl}以及棋盘游戏\citep{silver2017alphago}。
+因此，当强化学习算法被迁移到足够新的任务时，例如从电子游戏迁移到机器人任务，通常需要大量工程投入、领域经验和计算资源来调节超参数\citep{andrychowicz2020whatmatters}。
+这种成本成为强化学习应用于新问题的瓶颈，也限制了它在计算开销较高、无法反复调参的模型或任务上的使用。
+如果能够得到一种无需重新配置即可适应新领域的通用算法，强化学习就更有可能进入广泛的实际应用场景。
+
+本文提出 Dreamer，这是一种在固定超参数下使用的通用算法，能够在广泛领域中超过专门算法，使强化学习更容易直接用于新问题。
+该算法的核心思想是学习一个世界模型，使智能体能够基于感知经验预测未来\citep{sutton1991dyna,finn2017visualforesight,ha2018worldmodels}。
+世界模型预测候选动作的结果，价值网络评估这些结果的价值，策略网络再选择能够取得较好结果的动作。
+尽管这一思路直观，但如何稳定地学习并利用世界模型、进而获得强任务性能，长期以来仍是开放问题\citep{kaiser2019simple}。
+Dreamer 通过一组基于归一化、平衡和变换的稳健技术来处理这一问题。
+实验表明，Dreamer 在 \cref{fig:tasks} 所示的 150 多项任务上表现稳定；随着模型规模和训练预算变化，其性能提升也具有可预测性。
+更大的模型通常取得更高分数，也往往需要更少的环境交互即可解决任务。
+
+为进一步检验强化学习的能力边界，我们关注近年来受到广泛研究的 Minecraft \citep{guss2019minerl,kanitscheider2021minecraftcurriculum,baker2022vpt}。
+围绕在 Minecraft 中自动学习收集钻石这一目标，研究社区曾举办 MineRL 钻石竞赛\footnote{
+MineRL 钻石竞赛于 2019、2020 和 2021 年举行，并提供人类专家轨迹数据集：\url{https://minerl.io/diamond}。此后几年的竞赛转向了更广泛的任务。}.
+在没有人类数据的情况下完成这一任务，被普遍认为是人工智能中的难题：开放世界带来稀疏奖励、困难探索、长时间跨度和程序化多样性等问题\citep{guss2019minerl}。
+受这些困难限制，先前方法通常依赖人类专家数据和特定领域课程\citep{kanitscheider2021minecraftcurriculum,baker2022vpt}。
+默认配置下的 Dreamer 是首个从零开始在 Minecraft 中收集钻石的算法。

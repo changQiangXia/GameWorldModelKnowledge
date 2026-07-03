@@ -1,0 +1,7 @@
+\begin{figure}[t]
+\centering
+\vspace*{-3ex}
+\includegraphics[width=\linewidth]{model/model}
+\caption{世界模型学习。图像训练序列 $x_t$ 先由 CNN 编码。RSSM 使用一系列确定性循环状态 $h_t$；在每个时间步，它计算一个后验随机状态 $z_t$，该状态融合当前图像 $x_t$ 的信息，同时计算一个先验随机状态 $\hat{z}_t$，后者在无法访问当前图像的情况下尝试预测该后验。与 PlaNet 和 DreamerV1 不同，DreamerV2 的随机状态是由多个分类变量组成的向量。学到的先验用于想象过程，如\cref{fig:policy}所示。KL 损失既训练先验，也正则化后验从图像中吸收的信息量；这种正则化提高了模型对新输入的稳健性，并鼓励模型复用过去时间步中的已有信息来预测奖励和重建图像，从而学习长期依赖关系。}
+\label{fig:model}
+\end{figure}

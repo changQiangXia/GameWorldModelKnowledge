@@ -1,0 +1,30 @@
+\begin{wrapfigure}[21]{R}{0.44\textwidth}
+\vspace*{-5ex}\hfill%
+\begin{minipage}{0.43\textwidth}
+\begin{algorithm}[H]
+\caption{\enskip\method}
+\label{alg:agent}
+\begin{hyphenrules}{nohyphenation}
+
+\begin{algorithmic}[1]
+\setlength{\itemsep}{.5ex}
+
+\vspace{1ex}
+\Statex \hspace*{-2.3ex}\textbf{第一阶段:} 世界模型预训练
+\State 在视频上使用\cref{eq:tok}训练分词器。
+\State 在分词后的视频和可选动作上使用\cref{eq:dyn}训练世界模型。
+
+\vspace{1ex}
+\Statex \hspace*{-2.3ex}\textbf{第二阶段:} 智能体微调
+\State 微调世界模型，并使用\cref{eq:dyn}和\cref{eq:bcrm}为策略头和奖励头加入任务输入。
+
+\vspace{1ex}
+\Statex \hspace*{-2.3ex}\textbf{第三阶段:} 想象训练
+\State 在世界模型和策略头生成的轨迹上，使用\cref{eq:pol}优化策略头，并使用\cref{eq:val}优化价值头。
+\vspace{1ex}
+
+\end{algorithmic}
+\end{hyphenrules}
+\end{algorithm}
+\end{minipage}
+\end{wrapfigure}

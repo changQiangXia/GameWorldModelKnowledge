@@ -1,0 +1,19 @@
+\section{来自像素的人体}
+\label{seq:humanoid}
+
+\input{figures/hum-video/figure}
+\input{figures/hum-score/figure}
+
+本文主要实验聚焦于离散动作的 Atari 基准，但 DreamerV2 同样适用于连续动作控制任务。为此，actor 输出截断正态分布，而不是分类分布。为了展示 DreamerV2 在连续控制上的能力，我们选择了具有挑战性、且仅使用图像输入的 Humanoid 环境，如\cref{fig:hum-video}所示。我们发现，在连续控制任务中，动力学反向传播明显优于 Reinforce 梯度，因此设置$\rho=0$。我们还设置$\eta=10^{-5}$和$\beta=2$以进一步加快学习。DreamerV2 能够稳定解决 episode 开始时需要的站立动作，以及随后行走的问题；得分见\cref{fig:hum-score}。据我们所知，这是首个仅从像素输入解决 Humanoid 环境的公开结果。
+
+\clearpage
+
+\section{蒙特祖马的复仇}
+\label{seq:montezuma}
+
+\input{figures/mon-video/figure}
+\input{figures/mon-score/figure}
+
+虽然主要实验在所有任务上使用相同超参数，但我们发现，在 Montezuma's Revenge 上使用较低折扣因子$\gamma=0.99$可以取得更高性能，可能是因为这能在稀疏奖励下稳定价值学习。\Cref{fig:mon-score} 展示了该设置下的性能，其余超参数均保持默认。DreamerV2 在硬探索游戏 Montezuma's Revenge 上超过现有无模型方法，并达到 \citet{taiga2019benchmark} 在 Rainbow 上加入显式探索算法 ICM\citep{pathak2017icm} 后的性能。这说明世界模型可能有助于解决稀疏奖励任务，例如通过更好的泛化、在紧凑潜空间中进行高效策略优化以支持更多 actor-critic 更新，或通过奖励预测器泛化来平滑稀疏奖励。
+
+\clearpage
