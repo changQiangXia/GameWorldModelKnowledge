@@ -11,7 +11,7 @@
 ├── prerequisiteKnowledge/          # 前置知识笔记，如 VAE、ELBO、KL、最大似然等
 ├── papersofGW/                     # game world model 相关论文、源码和理解笔记
 ├── papers/                         # 本地论文资料目录
-└── suggestions/                    # 本地修改建议和迭代记录，默认不提交
+└── suggestions/                    # 仅保留空目录占位，本地修改建议默认不提交
 ```
 
 ## 核心文档
@@ -83,7 +83,7 @@ LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk
 - LaTeX 编译中间产物
 - `papers/` 和 `papersofGW/` 中除论文原文 PDF、论文翻译 PDF 外的其他文件
 - 大体积压缩包
-- `suggestions/` 本地修改建议目录
+- `suggestions/` 中除 `.gitkeep` 外的本地修改建议文件
 
 如果某篇论文的翻译 PDF 不在 `translation_latex/main.pdf`，需要按实际路径补充 `.gitignore` 的白名单规则。
 
