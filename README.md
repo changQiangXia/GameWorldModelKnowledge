@@ -1,54 +1,61 @@
 # Game World Model 学习资料库
 
-本仓库用于整理 world model、game world model、Dreamer 系列、DINO/DINOv2、具身智能 benchmark 以及 MineWorld 等相关学习资料。当前内容以中文笔记、LaTeX 教程、论文理解文档和复现要点为主。
+这个仓库用于整理我在 world model 和 game world model 方向上的学习资料，包括教程、论文原文、论文翻译、复现要点、前置数学知识和阶段性理解笔记。
 
-## 目录结构
+当前重点方向包括：Dreamer 系列、VAE/RSSM、DINO/DINOv2、具身智能研究版图、benchmark、game world model，以及 MineWorld 等游戏世界模型论文。
+
+## 快速入口
+
+| 路径 | 内容 |
+| --- | --- |
+| `world_model_tutorial.pdf` | 世界模型主教程 PDF，适合直接阅读 |
+| `world_model_tutorial.tex` | 世界模型主教程 LaTeX 源文件，修改教程时优先编辑这里 |
+| `prerequisiteKnowledge/` | 前置知识笔记，如最大似然、KL 散度、ELBO、Jensen 不等式、VAE 等 |
+| `papers/` | world model、Dreamer 等方向的论文原文 PDF 与翻译 PDF |
+| `papersofGW/` | game world model 方向的论文原文 PDF 与翻译 PDF；本地可放研究材料 |
+| `papersofGW/mineWorld/` | MineWorld 相关资料目录；Git 默认只保留论文原文和翻译 PDF |
+| `suggestions/` | 本地修订建议目录；仓库只保留 `.gitkeep` 占位文件 |
+
+## 内容地图
+
+主教程和相关笔记目前覆盖以下主题：
+
+- 基础脉络：Dyna、model-based reinforcement learning、World Models、PlaNet
+- 生成式状态建模：VAE、VQ-VAE、latent state、RSSM、ELBO
+- Dreamer 系列：Dreamer、DreamerV2、DreamerV3，以及 actor-critic 想象训练
+- 其他世界模型路线：MuZero、TD-MPC、Transformer-based world model
+- 表征学习补充：DINO、DINOv2、JEPA
+- 具身智能相关讨论：world model、VLA、LAM、benchmark 与评测协议
+- 游戏世界模型：MineWorld、GameNGen、DIAMOND、Genie、MineDojo、Craftax
+- 复现关注点：数据来源、算力需求、输入输出定义、指标计算和个人设备可行性
+
+## 论文目录约定
+
+`papers/` 和 `papersofGW/` 中默认只提交两类文件：
 
 ```text
-.
-├── world_model_tutorial.tex        # 世界模型教程 LaTeX 源文件
-├── world_model_tutorial.pdf        # 世界模型教程 PDF
-├── prerequisiteKnowledge/          # 前置知识笔记，如 VAE、ELBO、KL、最大似然等
-├── papersofGW/                     # game world model 相关论文、源码和理解笔记
-├── papers/                         # 本地论文资料目录
-└── suggestions/                    # 仅保留空目录占位，本地修改建议默认不提交
+papers/<paper>/<paper>.pdf
+papers/<paper>/translation_latex/main.pdf
+
+papersofGW/<paper>/<paper>.pdf
+papersofGW/<paper>/translation_latex/main.pdf
 ```
 
-## 核心文档
+也就是说，论文原文 PDF 和翻译后的 PDF 会保留在 Git 中；其他过程文件默认只在本地保留。
 
-- `world_model_tutorial.pdf`
-  - 主教程，梳理从 Dyna、VAE、World Models、PlaNet、Dreamer、MuZero、TD-MPC 到 DINO、benchmark 和 game world model 的发展脉络。
-  - 已根据本地修改建议进行补强，重点扩展了 VAE、RSSM、Dreamer actor-critic、DINO、benchmark 和 game world model 内容。
+默认不提交的内容包括：
 
-- `world_model_tutorial.tex`
-  - 主教程的 LaTeX 源文件。
-  - 若需要修改教程，应优先编辑该文件，再重新编译 PDF。
+- 论文抽取文本
+- 翻译缓存和状态文件
+- 翻译用 LaTeX 中间文件
+- 下载的源码、压缩包和临时数据
+- 本地 Python 依赖目录
+- LaTeX 编译中间产物
+- `suggestions/` 中除 `.gitkeep` 以外的个人修改建议
 
-- `prerequisiteKnowledge/`
-  - 记录学习世界模型前需要掌握的基础知识。
-  - 包括最大似然、KL 散度、ELBO、Jensen 不等式、VAE、`p_\theta` / `q_\phi` 等概念解释。
+如果某篇论文的翻译 PDF 不在 `translation_latex/main.pdf`，需要按实际路径补充 `.gitignore` 白名单。
 
-- `papersofGW/mineWorld/`
-  - MineWorld 论文、源码和理解笔记相关目录。
-  - 重点内容包括算法输入输出、VQ-VAE、动作 tokenizer、视觉 token、动作可控性评估、视频质量指标和个人设备复现思路。
-
-## 主要主题
-
-当前资料覆盖以下研究线索：
-
-- world model 基础
-- model-based reinforcement learning
-- VAE / latent state / RSSM
-- PlaNet / Dreamer / DreamerV2 / DreamerV3
-- MuZero / TD-MPC
-- Transformer-based world model
-- DINO / DINOv2 / JEPA 表征学习
-- VLA / LAM / 具身智能研究版图
-- benchmark 与评测协议
-- game world model
-- MineWorld / GameNGen / DIAMOND / Genie / MineDojo / Craftax
-
-## 编译教程 PDF
+## 编译教程
 
 如果本机安装了 TeX Live 或其他支持 XeLaTeX 的 LaTeX 环境，可以在仓库根目录执行：
 
@@ -62,39 +69,16 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error world_model_tutorial.te
 world_model_tutorial.pdf
 ```
 
-LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk` 已在 `.gitignore` 中排除。
-
-## Git 注意事项
-
-本仓库主要建议提交：
-
-- Markdown 学习笔记
-- LaTeX 教程源文件
-- 最终教程 PDF
-- `papers/` 和 `papersofGW/` 中的论文原文 PDF
-- `papers/` 和 `papersofGW/` 中的论文翻译 PDF，即 `translation_latex/main.pdf`
-- 轻量级配置和说明文件
-
-默认不建议提交：
-
-- 本地翻译依赖目录
-- Argos / deep-translator 下载依赖
-- 翻译缓存文件
-- LaTeX 编译中间产物
-- `papers/` 和 `papersofGW/` 中除论文原文 PDF、论文翻译 PDF 外的其他文件
-- 大体积压缩包
-- `suggestions/` 中除 `.gitkeep` 外的本地修改建议文件
-
-如果某篇论文的翻译 PDF 不在 `translation_latex/main.pdf`，需要按实际路径补充 `.gitignore` 的白名单规则。
+LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk` 已通过 `.gitignore` 排除。
 
 ## 建议工作流
 
-1. 修改 Markdown 或 LaTeX 源文件。
-2. 如果修改了 `world_model_tutorial.tex`，重新编译 PDF。
-3. 检查 PDF 是否正常打开。
+1. 修改 Markdown 笔记或 `world_model_tutorial.tex`。
+2. 如果修改了 `world_model_tutorial.tex`，重新编译 `world_model_tutorial.pdf`。
+3. 检查 PDF 是否能正常打开，内容是否更新。
 4. 运行 `git status` 检查待提交文件。
 5. 手动 commit 和 push。
 
-## 备注
+## 维护原则
 
-该目录包含大量学习过程中的资料整理和阶段性笔记。论文目录中默认只提交原文 PDF 和翻译 PDF，源码压缩包、翻译缓存、提取文本、临时脚本和中间产物仅适合本地保留。
+这个仓库主要保存最终可阅读、可备份的学习材料。源码、依赖、缓存、抽取文本和临时脚本尽量留在本地，不作为仓库内容长期维护。论文目录中优先保留原文 PDF 和翻译 PDF，避免把一次性处理过程全部提交进去。
