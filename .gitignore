@@ -24,6 +24,22 @@ translation_status.json
 # Local revision suggestions and private iteration notes
 suggestions/
 
+# Paper folders: keep only paper originals and translated PDFs.
+# Tracked examples:
+#   papers/<paper>/<paper>.pdf
+#   papers/<paper>/translation_latex/main.pdf
+#   papersofGW/<paper>/<paper>.pdf
+#   papersofGW/<paper>/translation_latex/main.pdf
+papers/**
+!papers/**/
+!papers/*/*.pdf
+!papers/*/translation_latex/main.pdf
+
+papersofGW/**
+!papersofGW/**/
+!papersofGW/*/*.pdf
+!papersofGW/*/translation_latex/main.pdf
+
 # LaTeX build artifacts
 *.aux
 *.bbl
@@ -43,9 +59,7 @@ suggestions/
 *.toc
 *.xdv
 
-# Keep the main generated tutorial PDF, but ignore downloaded paper PDFs by default.
-papers/**/*.pdf
-papersofGW/**/*.pdf
+# Keep the main generated tutorial PDF.
 !world_model_tutorial.pdf
 
 # Large archives and unpacked paper source dumps

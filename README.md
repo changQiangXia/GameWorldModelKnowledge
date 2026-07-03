@@ -71,6 +71,8 @@ LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk
 - Markdown 学习笔记
 - LaTeX 教程源文件
 - 最终教程 PDF
+- `papers/` 和 `papersofGW/` 中的论文原文 PDF
+- `papers/` 和 `papersofGW/` 中的论文翻译 PDF，即 `translation_latex/main.pdf`
 - 轻量级配置和说明文件
 
 默认不建议提交：
@@ -79,11 +81,11 @@ LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk
 - Argos / deep-translator 下载依赖
 - 翻译缓存文件
 - LaTeX 编译中间产物
-- 下载的论文 PDF 原件
+- `papers/` 和 `papersofGW/` 中除论文原文 PDF、论文翻译 PDF 外的其他文件
 - 大体积压缩包
 - `suggestions/` 本地修改建议目录
 
-如果确实需要把某篇论文 PDF 或数据文件纳入版本管理，可以按需修改 `.gitignore`。
+如果某篇论文的翻译 PDF 不在 `translation_latex/main.pdf`，需要按实际路径补充 `.gitignore` 的白名单规则。
 
 ## 建议工作流
 
@@ -95,4 +97,4 @@ LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk
 
 ## 备注
 
-该目录包含大量学习过程中的资料整理和阶段性笔记。部分论文原文、源码压缩包和翻译缓存可能仅适合本地保留，不一定适合推送到公开仓库。
+该目录包含大量学习过程中的资料整理和阶段性笔记。论文目录中默认只提交原文 PDF 和翻译 PDF，源码压缩包、翻译缓存、提取文本、临时脚本和中间产物仅适合本地保留。
