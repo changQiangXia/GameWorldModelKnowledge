@@ -1,8 +1,0 @@
-\begin{figure}[t]
-\centering
-\begin{subfigure}{\textwidth}
-\includegraphics[width=\linewidth]{ablations/ablations}
-\end{subfigure}%
-\caption{Dreamer 的消融实验与稳健扩展。\textbf{a}，所有单项稳健性技术平均而言都提升 Dreamer 的性能，尽管每项技术可能只影响部分任务；各任务的训练曲线见补充材料。\textbf{b}，Dreamer 的性能主要依赖其世界模型的无监督重建损失，这不同于多数主要依赖奖励和值预测梯度的先前算法\citep{mnih2015dqn,schulman2017ppo,schrittwieser2019muzero}。\textbf{c}，随着模型规模从 12M 参数增至 400M 参数，Dreamer 的性能单调提升；更大的模型通常提高任务性能，也减少所需环境交互。\textbf{d}，更高的回放比率可以可预测地提升 Dreamer 性能。结合模型规模，这使实践者能够通过投入更多计算资源来提高任务性能和数据效率。}
-\label{fig:ablations}
-\end{figure}

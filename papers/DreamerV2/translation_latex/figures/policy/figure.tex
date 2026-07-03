@@ -1,7 +1,0 @@
-\begin{figure}[t]
-\centering
-\vspace*{-3ex}
-\includegraphics[width=0.9\linewidth]{policy/policy}
-\caption{Actor-critic 学习。\cref{fig:model} 用于从紧凑潜空间中的想象轨迹学习策略。轨迹从模型训练得到的后验状态开始，并通过从 actor 网络采样动作向前预测。critic 网络预测每个状态未来奖励的期望和，并在想象奖励上使用时序差分学习。actor 通过 Reinforce 梯度、世界模型的直通梯度或二者组合进行训练，以最大化 critic 的预测值。}
-\label{fig:policy}
-\end{figure}
