@@ -11,14 +11,14 @@
 ├── prerequisiteKnowledge/          # 前置知识笔记，如 VAE、ELBO、KL、最大似然等
 ├── papersofGW/                     # game world model 相关论文、源码和理解笔记
 ├── papers/                         # 本地论文资料目录
-└── suggestions/                    # 教程修改建议和迭代记录
+└── suggestions/                    # 本地修改建议和迭代记录，默认不提交
 ```
 
 ## 核心文档
 
 - `world_model_tutorial.pdf`
   - 主教程，梳理从 Dyna、VAE、World Models、PlaNet、Dreamer、MuZero、TD-MPC 到 DINO、benchmark 和 game world model 的发展脉络。
-  - 已根据 `suggestions/6.26.md` 进行补强，重点扩展了 VAE、RSSM、Dreamer actor-critic、DINO、benchmark 和 game world model 内容。
+  - 已根据本地修改建议进行补强，重点扩展了 VAE、RSSM、Dreamer actor-critic、DINO、benchmark 和 game world model 内容。
 
 - `world_model_tutorial.tex`
   - 主教程的 LaTeX 源文件。
@@ -81,6 +81,7 @@ LaTeX 中间文件如 `.aux`、`.log`、`.toc`、`.xdv`、`.fls`、`.fdb_latexmk
 - LaTeX 编译中间产物
 - 下载的论文 PDF 原件
 - 大体积压缩包
+- `suggestions/` 本地修改建议目录
 
 如果确实需要把某篇论文 PDF 或数据文件纳入版本管理，可以按需修改 `.gitignore`。
 

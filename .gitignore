@@ -21,6 +21,9 @@ translation_status.json
 *_cache.json
 *_status.json
 
+# Local revision suggestions and private iteration notes
+suggestions/
+
 # LaTeX build artifacts
 *.aux
 *.bbl
